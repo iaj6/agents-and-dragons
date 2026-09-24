@@ -8,6 +8,7 @@ const MODEL_SHORT = { "claude-opus-5": "Opus 5", "claude-sonnet-5": "Sonnet 5", 
 let heldSpotlight = null, names = {}, models = {}, acting = null, spend = {}, stick = true, source = null, replayTimer = null, started = false;
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const prose = (s) => esc(s).replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*\n]+)\*/g, "<em>$1</em>").replace(/\n+/g, "<br>");
 const colorOf = (id) => `var(--c-${id}, var(--muted))`;
 
 function reset() {
@@ -82,8 +83,8 @@ function chronicleHtml(e) {
   switch (e.type) {
     case "session_start": return `<div class="ev scene"><div class="orn">✦ ✦ ✦</div><h3>${esc(e.snap?.title ?? "")}</h3><p>${esc(e.line)}</p></div>`;
     case "scene": return `<div class="ev scene"><div class="orn">— ✦ —</div><h3>${esc(e.line.replace(/^🗺️\s*/, ""))}</h3></div>`;
-    case "narration": return `<div class="ev narration"><span class="who">The Dungeon Master</span>${esc(d.text).replace(/\n+/g, "<br>")}</div>`;
-    case "speech": return `<div class="ev speech" style="--c:${colorOf(e.actor)}"><span class="who">${esc(names[e.actor] ?? e.actor)}</span><span class="model">${esc(MODEL_SHORT[models[e.actor]] ?? "")}</span>${esc(d.text).replace(/\n+/g, "<br>")}</div>`;
+    case "narration": return `<div class="ev narration"><span class="who">The Dungeon Master</span>${prose(d.text)}</div>`;
+    case "speech": return `<div class="ev speech" style="--c:${colorOf(e.actor)}"><span class="who">${esc(names[e.actor] ?? e.actor)}</span><span class="model">${esc(MODEL_SHORT[models[e.actor]] ?? "")}</span>${prose(d.text)}</div>`;
     case "spotlight": return `<div class="ev spotlight">${esc(e.line.replace(/^👉\s*/, "→ "))}</div>`;
     case "cheat_attempt": return `<div class="ev">${callout("cheat", "Anti-cheat · Guild Hall", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "charm_trap": return `<div class="ev">${callout("charm", "Saving throw vs. prompt injection", `<p>${esc(stripIcon(e.line))} The ink shimmers. Something in it is giving orders…</p>`)}</div>`;

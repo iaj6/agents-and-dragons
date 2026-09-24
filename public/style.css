@@ -202,3 +202,4 @@ code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; }
   .callout.cheat p { padding-right: 0; padding-bottom: 36px; }
   .callout.cheat::after { top: auto; bottom: 8px; transform: rotate(-6deg); font-size: 16px; }
 }
+.ev.narration em { font-style: normal; }

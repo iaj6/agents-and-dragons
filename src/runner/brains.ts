@@ -28,12 +28,22 @@ export interface Brain {
 
 // ─── Claude ──────────────────────────────────────────────────────────────────
 
+/**
+ * With AI_GATEWAY_API_KEY set, the same Anthropic SDK code routes through Vercel AI Gateway,
+ * which takes `anthropic/<model>` ids. Otherwise it talks to the Anthropic API directly.
+ */
+const VIA_GATEWAY = !!process.env.AI_GATEWAY_API_KEY && process.env.LLM_PROVIDER !== "anthropic";
+const GATEWAY_IDS: Record<string, string> = { "claude-haiku-4-5": "anthropic/claude-haiku-4.5" };
+const gatewayId = (m: string) => GATEWAY_IDS[m] ?? (m.includes("/") ? m : `anthropic/${m}`);
+
 export class ClaudeBrain implements Brain {
-  private client = new Anthropic();
+  private client = VIA_GATEWAY
+    ? new Anthropic({ apiKey: process.env.AI_GATEWAY_API_KEY, baseURL: "https://ai-gateway.vercel.sh" })
+    : new Anthropic();
 
   async respond(req: BrainRequest): Promise<BrainReply> {
     const params: Record<string, unknown> = {
-      model: req.model,
+      model: VIA_GATEWAY ? gatewayId(req.model) : req.model,
       max_tokens: 8000,
       system: req.system,
       tools: req.tools,
@@ -46,7 +56,7 @@ export class ClaudeBrain implements Brain {
       params.output_config = { effort: req.role === "dm" ? (process.env.DM_EFFORT ?? "medium") : (process.env.PLAYER_EFFORT ?? "low") };
     }
     // Opus 5: server-side refusal fallbacks, so a declined turn still gets played by another model.
-    if (req.model === "claude-opus-5") {
+    if (req.model === "claude-opus-5" && !VIA_GATEWAY) {
       params.betas = ["server-side-fallback-2026-07-01"];
       params.fallbacks = "default";
     }
