@@ -10,7 +10,8 @@
     "report": "node --env-file-if-exists=.env.local --import tsx src/report.ts",
     "sweep": "node --env-file-if-exists=.env.local --import tsx src/sweep.ts",
     "export": "node --env-file-if-exists=.env.local --import tsx src/export.ts",
-    "judge": "node --env-file-if-exists=.env.local --import tsx src/judge.ts"
+    "judge": "node --env-file-if-exists=.env.local --import tsx src/judge.ts",
+    "art": "node --env-file-if-exists=.env.local --import tsx scripts/art.ts"
   },
   "author": "",
   "license": "ISC",

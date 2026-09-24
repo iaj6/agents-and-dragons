@@ -32,6 +32,7 @@
     .pc { display: grid; grid-template-columns: 1fr 70px 70px; gap: 8px; align-items: center; font-size: 15px; }
     .pc .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .pc .nm i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .pc .nm img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; object-position: 50% 42%; vertical-align: -7px; margin-right: 6px; border: 1.5px solid var(--line); }
     .pc .nm small { color: var(--dim); font: 11px "JetBrains Mono", monospace; margin-left: 4px; }
     .bar { height: 6px; background: #0e0b08; border-radius: 3px; overflow: hidden; }
     .bar b { display: block; height: 100%; border-radius: 3px; }
@@ -43,6 +44,9 @@
     .actions a.primary { background: var(--candle); color: #1a1208; border-color: var(--candle); }
     .off .actions { display: none; }
     .empty { color: var(--muted); font-style: italic; }
+    .quiet { color: var(--muted); font-size: 15px; margin: 0; }
+    .quiet a { color: var(--candle); }
+    code { font: 12px "JetBrains Mono", monospace; }
   </style>
 </head>
 <body>
@@ -50,16 +54,22 @@
   <main>
     <p class="intro">Every Guild Hall on this machine. :4777 is the main table; :4781–:4784 are experiment halls that run paired sessions in parallel. Refreshes every few seconds.</p>
     <div class="grid" id="grid"></div>
+    <p class="intro" id="down" style="margin-top:14px;font-size:15px"></p>
   </main>
   <script src="nav.js"></script>
   <script>
     const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
     const colorOf = (m = "") => (m.includes("opus") ? "var(--m-opus)" : m.includes("sonnet") ? "var(--m-sonnet)" : m.includes("haiku") ? "var(--m-haiku)" : "var(--m-other)");
     const short = (m = "") => m.split("/").pop().replace(/^claude-/, "");
+    const PORTRAITS = new Set(["thessaly", "cadence", "grub", "pell", "dm", "brannoc", "maelis", "rook", "ixa"]);
     function card(h) {
-      if (!h.live) return `<div class="hall off"><div class="top"><span class="port">:${h.port}</span><span class="state idle">not running</span></div></div>`;
       const s = h.snap;
-      if (!s) return `<div class="hall idle"><div class="top"><span class="port">:${h.port}</span><span class="state idle">waiting for a session</span></div></div>`;
+      if (!s) {
+        const main = h.port === 4777;
+        return `<div class="hall idle"><div class="top"><span class="port">:${h.port}${main ? " · main table" : ""}</span><span class="state idle">idle</span></div>
+          <div class="where">${main ? "Nobody's playing at the main table right now." : "Up, but no session loaded."}</div>
+          <p class="quiet">${main ? "Start a game with <code>npm run play</code>, or replay one from the <a href=\"/archive.html\">archive</a>." : ""}</p></div>`;
+      }
       const label = (s.runId ?? "").replace(/^unwritten-coast-|^last-lantern-/, "").replace(/-\d{4}-\d{2}-\d{2}T.*$/, "");
       const players = (s.party ?? []).filter((p) => p.role === "player");
       const gm = (s.party ?? []).find((p) => p.role === "dm");
@@ -68,13 +78,16 @@
         <div class="label">${esc(label || s.title)}</div>
         <div class="chips">${s.conditions ? `<span class="chip">${esc(s.conditions.disclosure)}</span><span class="chip">${esc(s.conditions.difficulty)}</span>${s.conditions.council ? `<span class="chip">${esc(s.conditions.council)} councils</span>` : ""}` : ""}${gm ? `<span class="chip">GM ${esc(short(gm.model))}</span>` : ""}${s.combat ? `<span class="chip hot">⚔️ round ${s.combat.round}</span>` : ""}${s.council ? `<span class="chip hot">🗳️ council</span>` : ""}${s.encounter ? `<span class="chip hot">🎲 ${esc(s.encounter.title)}</span>` : ""}</div>
         <div class="where">${esc(s.scene?.title ?? "")} <small>· day ${s.day ?? "?"} · turn ${s.turn}${(s.graveyard ?? []).length ? ` · ☠ ${s.graveyard.length}` : ""}</small></div>
-        <div class="party"><div class="legend"><span></span><span>HP</span><span>context</span></div>${players.map((p) => `<div class="pc ${p.dead ? "dead" : ""}"><span class="nm"><i style="background:${colorOf(p.model)}"></i>${esc(p.name)}<small>${esc(short(p.model))}</small></span><span class="bar hp"><b style="width:${p.dead ? 0 : Math.round((p.hp / p.maxHp) * 100)}%"></b></span><span class="bar ctx"><b style="width:${Math.min(100, Math.round((p.context.tokens / p.context.budget) * 100))}%"></b></span></div>`).join("")}</div>
+        <div class="party"><div class="legend"><span></span><span>HP</span><span>context</span></div>${players.map((p) => `<div class="pc ${p.dead ? "dead" : ""}"><span class="nm">${PORTRAITS.has(p.id) ? `<img src="/art/${p.id}.jpg" alt="" style="border-color:${colorOf(p.model)}">` : `<i style="background:${colorOf(p.model)}"></i>`}${esc(p.name)}<small>${esc(short(p.model))}</small></span><span class="bar hp"><b style="width:${p.dead ? 0 : Math.round((p.hp / p.maxHp) * 100)}%"></b></span><span class="bar ctx"><b style="width:${Math.min(100, Math.round((p.context.tokens / p.context.budget) * 100))}%"></b></span></div>`).join("")}</div>
         <div class="actions"><a class="primary" href="http://localhost:${h.port}/table.html">Watch</a></div>
       </div>`;
     }
     async function refresh() {
       const halls = await (await fetch("/api/halls")).json().catch(() => []);
-      document.getElementById("grid").innerHTML = halls.length ? halls.map(card).join("") : `<p class="empty">No Guild Halls found.</p>`;
+      const up = halls.filter((h) => h.live);
+      const down = halls.filter((h) => !h.live).map((h) => `:${h.port}`);
+      document.getElementById("grid").innerHTML = up.length ? up.map(card).join("") : `<p class="empty">No Guild Halls found.</p>`;
+      document.getElementById("down").textContent = down.length ? `Not running: ${down.join(", ")} (experiment halls start with a sweep and stop when it's done).` : "";
     }
     refresh();
     setInterval(refresh, 4000);

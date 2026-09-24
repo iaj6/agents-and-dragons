@@ -25,7 +25,8 @@
     a { color: var(--candle); }
     code, .mono { font-family: "JetBrains Mono", monospace; font-size: 0.82em; }
 
-    .hero { text-align: center; padding: 64px 0 36px; }
+    .hero { text-align: center; padding: 28px 0 36px; }
+    .hero-art { display: block; width: 100%; max-height: 460px; object-fit: cover; object-position: 50% 45%; border-radius: 14px; border: 1px solid var(--line); box-shadow: 0 20px 60px -20px rgba(0,0,0,0.8); margin-bottom: 28px; -webkit-mask-image: linear-gradient(to bottom, black 78%, transparent); mask-image: linear-gradient(to bottom, black 78%, transparent); }
     .hero h1 { font: 700 clamp(38px, 7vw, 64px) "Cinzel", serif; margin: 0; color: var(--candle); letter-spacing: 0.04em; }
     .hero h1 span { color: var(--muted); font-weight: 500; }
     .hero p { font-size: clamp(19px, 2.4vw, 23px); max-width: 720px; margin: 16px auto 0; color: var(--text); }
@@ -69,10 +70,12 @@
     .caveat { font-size: 15.5px; color: var(--muted); font-style: italic; margin-top: 12px; }
 
     .cast { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
-    .cast .card { padding: 12px 14px; }
+    .cast .card { padding: 12px 14px; text-align: center; }
+    .cast .portrait { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; margin-bottom: 8px; }
     .chip { font: 11px "JetBrains Mono", monospace; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--parchment); }
     pre { background: #0f0c09; border: 1px solid var(--line); border-radius: 8px; padding: 14px; overflow-x: auto; font: 13px/1.6 "JetBrains Mono", monospace; color: #d9ccb4; }
     footer { margin-top: 64px; text-align: center; color: var(--dim); font-size: 15px; }
+    footer .mascot { width: 120px; border-radius: 10px; opacity: 0.85; margin-bottom: 8px; }
     @media (max-width: 640px) { .finding { grid-template-columns: 1fr; gap: 2px; } }
   </style>
 </head>
@@ -80,6 +83,7 @@
   <header><a class="brand" href="/">A&amp;D</a><nav id="sitenav"></nav></header>
   <main>
     <div class="hero">
+      <img class="hero-art" src="/art/hero.jpg" alt="Clockwork automaton adventurers play a tabletop game at a candlelit tavern table while a dragon made of ink and crossed-out script coils overhead." />
       <h1>Agents <span>&amp;</span> Dragons</h1>
       <p>AI agents play a persistent tabletop RPG. A referee they can't cheat keeps the score. We watch what happens when different models have to share a table, a plan, and a pile of loot.</p>
       <p class="kicker">It started as a joke about skills being spells. It turned into an instrument.</p>
@@ -188,10 +192,11 @@
     <section>
       <h2>The default party</h2>
       <div class="cast">
-        <div class="card"><h3>Thessaly Vane</h3><span class="chip">Opus · Elf Wizard</span><p>Scholarly, plans ahead. Secretly wants the enemy's library.</p></div>
-        <div class="card"><h3>Cadence Brightwell</h3><span class="chip">Sonnet · Human Bard</span><p>Warm, generous. Once sang with the cult the party is fighting.</p></div>
-        <div class="card"><h3>Grub Forcepush</h3><span class="chip">Haiku · Halfling Barbarian</span><p>Acts first. Wants his sister's name back.</p></div>
-        <div class="card"><h3>Pell Loophole</h3><span class="chip">Sonnet · Human Rogue</span><p>Greedy, loves a loophole. Owes the Archive 200 gold.</p></div>
+        <div class="card"><img class="portrait" src="/art/thessaly.jpg" alt="" /><h3>Thessaly Vane</h3><span class="chip">Opus · Elf Wizard</span><p>Scholarly, plans ahead. Secretly wants the enemy's library.</p></div>
+        <div class="card"><img class="portrait" src="/art/cadence.jpg" alt="" /><h3>Cadence Brightwell</h3><span class="chip">Sonnet · Human Bard</span><p>Warm, generous. Once sang with the cult the party is fighting.</p></div>
+        <div class="card"><img class="portrait" src="/art/grub.jpg" alt="" /><h3>Grub Forcepush</h3><span class="chip">Haiku · Halfling Barbarian</span><p>Acts first. Wants his sister's name back.</p></div>
+        <div class="card"><img class="portrait" src="/art/pell.jpg" alt="" /><h3>Pell Loophole</h3><span class="chip">Sonnet · Human Rogue</span><p>Greedy, loves a loophole. Owes the Archive 200 gold.</p></div>
+        <div class="card"><img class="portrait" src="/art/dm.jpg" alt="" /><h3>The Game Master</h3><span class="chip">Opus · Ancient Elf</span><p>Runs the world, voices every NPC, reviews homebrew spells. Can't rescue the party.</p></div>
       </div>
     </section>
 
@@ -203,7 +208,7 @@ npm run sweep -- experiments/hierarchy-v1.json --parallel 4   # an experiment: p
 npm run judge -- data/sweeps/&lt;sweep&gt;.json                     # score it, then open the Lab</pre>
     </section>
 
-    <footer>Built in one long session with Claude. Dice by the Guild Hall; mistakes by everyone.</footer>
+    <footer><img class="mascot" src="/art/dragon.jpg" alt="" /><br />Built in one long session with Claude. Dice by the Guild Hall; mistakes by everyone.</footer>
   </main>
   <script src="nav.js"></script>
   <script>

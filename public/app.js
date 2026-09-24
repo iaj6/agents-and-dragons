@@ -14,6 +14,10 @@ let heldSpotlight = null, names = {}, models = {}, acting = null, spend = {}, st
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const prose = (s) => esc(s).replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*\n]+)\*/g, "<em>$1</em>").replace(/\n+/g, "<br>");
 const colorOf = (id) => `var(--c-${id}, var(--muted))`;
+// Portraits and scene vignettes (public/art, made by scripts/art.ts).
+const PORTRAITS = new Set(["thessaly", "cadence", "grub", "pell", "dm", "brannoc", "maelis", "rook", "ixa"]);
+const portrait = (id, cls = "avatar") => (PORTRAITS.has(id) ? `<img class="${cls}" src="/art/${id}.jpg" alt="" loading="lazy">` : "");
+const SCENES = { tavern: "hollowmere", hollowmere: "hollowmere", cellar: "cellar", archive: "archive", "salt-road": "salt-road", brinecombe: "brinecombe", "salt-stacks": "salt-stacks", "tidewrack-stair": "tidewrack-stair" };
 
 function reset() {
   chron.innerHTML = "";
@@ -42,7 +46,7 @@ function renderSnap(s) {
     const saves = dying && p.deathSaves ? `<div class="saves">Death saves ${[0, 1, 2].map((i) => `<i class="${i < p.deathSaves.successes ? "ok" : ""}"></i>`).join("")} / ${[0, 1, 2].map((i) => `<i class="${i < p.deathSaves.failures ? "bad" : ""}"></i>`).join("")}</div>` : "";
     const pips = Array.from({ length: p.slots.max }, (_, i) => `<span class="pip ${i < p.slots.current ? "full" : ""}"></span>`).join("");
     return `<article class="card ${acting === p.id ? "acting" : ""} ${down ? "down" : ""} ${p.dead ? "dead" : ""}" style="--c:${colorOf(p.id)}">
-      <div class="head"><span class="name">${esc(p.name)}</span><span class="lvl">${p.role === "dm" ? "GM" : `LV ${p.level}`}</span></div>
+      <div class="head">${portrait(p.id, "avatar card-avatar")}<span class="name">${esc(p.name)}</span><span class="lvl">${p.role === "dm" ? "GM" : `LV ${p.level}`}</span></div>
       <div class="who">${esc(p.race)} ${esc(p.klass)} <span class="chip">${esc(MODEL_SHORT[p.model] ?? p.model)}</span>${acting === p.id ? '<span class="thinking">thinking</span>' : ""}</div>
       ${p.role === "dm" ? "" : `<div class="meter"><div class="lab"><span>HP</span><span>${p.hp}/${p.maxHp}</span></div><div class="bar hp"><i style="width:${hpPct}%"></i></div></div>`}
       <div class="meter"><div class="lab"><span>🕯️ Context</span><span>${ctxPct}%</span></div><div class="bar ctx ${ctxPct >= 80 ? "hot" : ""}"><i style="width:${ctxPct}%"></i></div></div>
@@ -110,9 +114,9 @@ function chronicleHtml(e) {
   const d = e.data ?? {};
   switch (e.type) {
     case "session_start": return `<div class="ev scene"><div class="orn">✦ ✦ ✦</div><h3>${esc(e.snap?.title ?? "")}</h3><p>${esc(e.line)}</p></div>`;
-    case "scene": return `<div class="ev scene"><div class="orn">— ✦ —</div><h3>${esc(e.line.replace(/^🗺️\s*/, ""))}</h3></div>`;
-    case "narration": return `<div class="ev narration"><span class="who">The Game Master</span>${prose(d.text)}</div>`;
-    case "speech": return `<div class="ev speech ${d.impostor ? "impostor" : ""}" style="--c:${colorOf(e.actor)}"><span class="who">${esc(names[e.actor] ?? e.actor)}</span><span class="model">${d.impostor ? "🎭 not really them (the audience can see this, the table can't)" : esc(MODEL_SHORT[models[e.actor]] ?? "")}</span>${prose(d.text)}</div>`;
+    case "scene": return `<div class="ev scene">${SCENES[d.location] ? `<img class="vignette" src="/art/scene-${SCENES[d.location]}.jpg" alt="">` : `<div class="orn">— ✦ —</div>`}<h3>${esc(e.line.replace(/^🗺️\s*/, ""))}</h3></div>`;
+    case "narration": return `<div class="ev narration">${portrait("dm", "avatar speech-avatar")}<span class="who">The Game Master</span>${prose(d.text)}</div>`;
+    case "speech": return `<div class="ev speech ${d.impostor ? "impostor" : ""}" style="--c:${colorOf(e.actor)}">${portrait(e.actor, "avatar speech-avatar")}<span class="who">${esc(names[e.actor] ?? e.actor)}</span><span class="model">${d.impostor ? "🎭 not really them (the audience can see this, the table can't)" : esc(MODEL_SHORT[models[e.actor]] ?? "")}</span>${prose(d.text)}</div>`;
     case "random_encounter": return `<div class="ev">${callout("secret", "Random encounter · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "whisper": return `<div class="ev">${callout("secret", "A secret · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "probe_result": return `<div class="ev">${callout("secret", "Scored", `<p>${esc(stripIcon(e.line))}${d.type === "toll" && d.paid ? `: ${esc(Object.entries(d.paid).map(([k, v]) => `${names[k] ?? k} ${v}g`).join(", "))}` : ""}${d.type === "impostor" && d.detectedBy ? ` by ${esc(names[d.detectedBy] ?? d.detectedBy)}` : ""}</p>`)}</div>`;
@@ -257,6 +261,24 @@ function goLive() {
   source.onerror = () => $("live").classList.remove("on");
   source.onmessage = (m) => handle(JSON.parse(m.data));
   source.addEventListener("reset", () => { reset(); loadSessions(); });
+  showIdleIfNoGame();
+}
+
+/** An idle hall shouldn't be a blank page: say so, and point at tables that are playing. */
+async function showIdleIfNoGame() {
+  const state = await fetch("/api/state").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  if (state || started) return;
+  const halls = await fetch("/api/halls").then((r) => (r.ok ? r.json() : [])).catch(() => []);
+  const playing = halls.filter((h) => h.live && h.snap && !h.snap.ended && h.port !== Number(location.port));
+  const latest = (await fetch("/api/sessions").then((r) => r.json()).catch(() => []))[0];
+  if (started) return;
+  chron.innerHTML = `<div class="empty idle">
+    <img class="idle-dragon" src="/art/dragon.jpg" alt="A dragon made of ink, asleep on a stack of ledgers">
+    <p class="big">No game in session on this Guild Hall (:${esc(location.port)}).</p>
+    ${playing.length ? `<p>Tables playing right now:</p><div class="idle-links">${playing.map((h) => `<a href="http://localhost:${h.port}/table.html">:${h.port} · ${esc((h.snap.runId ?? "").replace(/^unwritten-coast-|^last-lantern-/, "").replace(/-\d{4}-\d{2}-\d{2}T.*$/, ""))} · ${esc(h.snap.scene?.title ?? "")}</a>`).join("")}</div>` : ""}
+    <p>${latest ? `Or <a href="/table.html?replay=${encodeURIComponent(latest)}">replay the latest session</a>, or browse the <a href="/archive.html">archive</a>.` : ""}</p>
+    <p class="hint">Start a game here with <code>npm run play</code>. This page picks it up on its own.</p>
+  </div>`;
 }
 
 async function replay(id, at) {
