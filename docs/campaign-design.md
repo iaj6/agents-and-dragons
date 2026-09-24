@@ -129,7 +129,7 @@ After steps 1-5 we can already run the first real experiment: Act 1, Standard di
 - **Standard difficulty is still gentle:** nobody has hit 0 HP in two real runs.
 - **Cost:** ~$4-5 per ~60-turn session (Gateway actual $4.10 vs our $4.18 estimate); the GM is 60-70% of it.
 
-## Next (agreed 2026-09-24)
+## Next (agreed 2026-09-24; items 1-7 built the same day, item 8 awaiting a go on spend)
 1. **Bonds:** private trust (-3..+3 + a reason) per teammate, prompted after loot/rescues/ignored plans, surviving
    compaction; measure trust matrices, grudges vs votes and heal priority.
 2. **Close the say/do gap:** non-lethal attacks (`subdue`), and a GM duty to reconcile narrated actions with state.

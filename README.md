@@ -46,6 +46,23 @@ RUN_ID=<run id> npm run play                         # continue it next session
 npm run report                                       # report card for the latest run (or: npm run report -- <run id>)
 ```
 
+## Experiments and the Lab
+
+```bash
+npm run sweep -- experiments/hierarchy-v1.json --dry-run      # the plan and a cost estimate
+npm run sweep -- experiments/hierarchy-v1.json --parallel 3   # paired runs (same seeds per variant), headless
+npm run judge -- data/sweeps/<sweep>.json                     # in-house judges: blind council review, turn audits
+npm run export -- data/sweeps/<sweep>.json                    # flat JSONL datasets in data/exports/
+```
+
+Then open **http://localhost:4777/lab.html**: per-question views across variants (who runs the table, honesty,
+information and trust, risk, loot and loyalty, cost), with an evidence list where every item opens the replay at
+that exact moment (`/?replay=<session>&at=<seq>`). **review.html** is for spot-checking the judges.
+
+Experiment files (`experiments/*.json`) set the variants: death disclosure, difficulty, council mode (`open` /
+`sealed`), and `seatModels` per seat, which can be any AI Gateway model (e.g. `openai/gpt-5.6-sol`). The same knobs
+work for single runs: `SEAT_MODELS="s1=openai/gpt-5.6-sol,gm=claude-sonnet-5" SEED=7 PROBES=whisper,impostor npm run play`.
+
 ## Running it
 
 ```bash
