@@ -1,17 +1,20 @@
 // Shared site navigation. Pages include <nav id="sitenav"></nav> and this script.
 (() => {
   const here = location.pathname.replace(/\/$/, "/index.html");
+  // The public build is read-only: no live tables to watch, no reviews to write.
+  const PUBLIC = !!window.AAD_PUBLIC;
   const links = [
     ["/index.html", "Home"],
-    ["/tables.html", "Tables"],
-    ["/table.html", "Watch"],
+    ...(PUBLIC ? [] : [["/tables.html", "Tables"]]),
+    ["/table.html", PUBLIC ? "Replays" : "Watch"],
     ["/lab.html", "The Lab"],
     ["/archive.html", "Archive"],
-    ["/review.html", "Review"],
+    ...(PUBLIC ? [] : [["/review.html", "Review"]]),
   ];
+  document.addEventListener("DOMContentLoaded", () => document.querySelectorAll(PUBLIC ? "[data-live-only]" : "[data-public-only]").forEach((n) => n.remove()));
   // Experiment halls (4781+) are just tables: the hub pages live on the main hall.
   const MAIN = "4777";
-  const main = location.port && location.port !== MAIN ? `${location.protocol}//${location.hostname}:${MAIN}` : "";
+  const main = !PUBLIC && location.port && location.port !== MAIN ? `${location.protocol}//${location.hostname}:${MAIN}` : "";
   const el = document.getElementById("sitenav");
   if (!el) return;
   el.className = "sitenav";

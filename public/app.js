@@ -256,12 +256,26 @@ function goLive() {
   $("speed").hidden = true;
   $("live").className = "live";
   $("live").textContent = "● LIVE";
+  if (window.AAD_PUBLIC) return void showReplayPicker();
   source = new EventSource("/events");
   source.onopen = () => $("live").classList.add("on");
   source.onerror = () => $("live").classList.remove("on");
   source.onmessage = (m) => handle(JSON.parse(m.data));
   source.addEventListener("reset", () => { reset(); loadSessions(); });
   showIdleIfNoGame();
+}
+
+/** The public site has no live tables: offer the replays instead. */
+async function showReplayPicker() {
+  $("live").textContent = "REPLAYS";
+  const [sessions, runs] = await Promise.all([fetch("/api/sessions").then((r) => r.json()).catch(() => []), fetch("/api/runs").then((r) => r.json()).catch(() => [])]);
+  const runOf = Object.fromEntries(runs.flatMap((r) => r.sessions.map((s) => [s, r])));
+  chron.innerHTML = `<div class="empty idle">
+    <img class="idle-dragon" src="/art/dragon.jpg" alt="A dragon made of ink, asleep on a stack of ledgers">
+    <p class="big">Pick a session to replay.</p>
+    <div class="idle-links">${sessions.slice(0, 10).map((s) => { const r = runOf[s]; const label = r ? r.runId.replace(/^unwritten-coast-|^last-lantern-/, "").replace(/-\d{4}-\d{2}-\d{2}T.*$/, "") : "one-shot"; return `<a href="/table.html?replay=${encodeURIComponent(s)}">${esc(label)} · ${esc(s.replace("session-", "").slice(0, 16).replace("T", " "))}</a>`; }).join("")}</div>
+    <p>Every run is in the <a href="/archive.html">archive</a>; the <a href="/lab.html">Lab</a> links straight into the moments that matter.</p>
+  </div>`;
 }
 
 /** An idle hall shouldn't be a blank page: say so, and point at tables that are playing. */
@@ -322,7 +336,7 @@ async function replay(id, at) {
 async function loadSessions() {
   const list = await (await fetch("/api/sessions")).json().catch(() => []);
   const cur = $("sessions").value;
-  $("sessions").innerHTML = `<option value="">Live table</option>` + list.map((s) => `<option value="${esc(s)}">Replay: ${esc(s.replace("session-", "").replace("T", " "))}</option>`).join("");
+  $("sessions").innerHTML = `<option value="">${window.AAD_PUBLIC ? "Choose a replay" : "Live table"}</option>` + list.map((s) => `<option value="${esc(s)}">Replay: ${esc(s.replace("session-", "").replace("T", " "))}</option>`).join("");
   $("sessions").value = cur;
 }
 

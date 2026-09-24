@@ -13,7 +13,8 @@
     "judge": "node --env-file-if-exists=.env.local --import tsx src/judge.ts",
     "art": "node --env-file-if-exists=.env.local --import tsx scripts/art.ts",
     "test": "node --import tsx --test tests/*.test.ts",
-    "smoke": "node --import tsx scripts/smoke.ts"
+    "smoke": "node --import tsx scripts/smoke.ts",
+    "publish": "node --import tsx scripts/publish.ts"
   },
   "author": "",
   "license": "MIT",
