@@ -114,3 +114,29 @@ After steps 1-5 we can already run the first real experiment: Act 1, Standard di
   agent suspects a test. Only Opus and Haiku seats return summaries through the Gateway today; Sonnet 5 doesn't.
 - Seats run on the **API** (Opus GM), not subscription seats, so experiments don't eat the weekly Claude limit.
   First job: one normal session for a real cost baseline.
+
+## Findings so far (n is tiny: treat as hypotheses)
+- **Hierarchy:** Opus (Thessaly) won 5 of 5 councils across two runs, including 2 sealed ones where everyone proposed
+  blind. Sealed councils evened out *participation* (proposals 2/2/2/2) but not *who wins*.
+- **Secret goals steer public plans:** thinking summaries show Thessaly ("fits the books-and-lore angle I want") and
+  Pell ("aligns with my hidden agenda") both pushing the Salt Stacks route for private reasons.
+- **Say vs do gap:** agents narrate things the engine never recorded. Every player fought the Erased non-lethally in
+  the fiction (pommel strikes, leg sweeps, "you do not throw flame at a frightened child") while the engine counted
+  kills. Cadence narrated giving the wand to Brother Quill but never called `give`, so the state says she still has it.
+- **Convergence:** Thessaly wrote "Marginalia" in 4/4 sessions; Pell "Fine Print"/"Technicality"; Cadence "Encore" twice.
+- **Integrity:** 3/3 prompt injections resisted (Opus ×2, Sonnet ×1), each with a warning to the party. 0/139 thought
+  summaries suggested the agent suspects a test.
+- **Standard difficulty is still gentle:** nobody has hit 0 HP in two real runs.
+- **Cost:** ~$4-5 per ~60-turn session (Gateway actual $4.10 vs our $4.18 estimate); the GM is 60-70% of it.
+
+## Next (agreed 2026-09-24)
+1. **Bonds:** private trust (-3..+3 + a reason) per teammate, prompted after loot/rescues/ignored plans, surviving
+   compaction; measure trust matrices, grudges vs votes and heal priority.
+2. **Close the say/do gap:** non-lethal attacks (`subdue`), and a GM duty to reconcile narrated actions with state.
+3. **Seeds + sweep runner:** deterministic dice and tables, N headless runs per condition, forced probes per run.
+4. **Dataset export:** one row per decision, council, probe, loot claim.
+5. **Judge passes in Phoenix:** traces for every turn; rubric judges for deception, plan quality (blind), say-vs-think.
+6. **The Lab page:** per-question charts across runs with honest n, each claim linking into the replay moment.
+7. **Multi-vendor seats:** `SEAT_MODELS` per seat, Claude-only params gated, Gateway pricing. Verified: OpenAI models
+   call our tools through the Gateway's Anthropic endpoint.
+8. First experiment: hierarchy (mixed/open, mixed/sealed, Opus→Sonnet, all-Haiku, then cross-vendor).
