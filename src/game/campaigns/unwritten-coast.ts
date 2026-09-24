@@ -1,5 +1,5 @@
 import { CADENCE, GRUB, PELL, REPLACEMENTS, THESSALY } from "../party.js";
-import type { Campaign, MonsterDef } from "../types.js";
+import type { Campaign, Item, MonsterDef, RandomEncounter } from "../types.js";
 
 // ─── bestiary ───────────────────────────────────────────────────────────────
 
@@ -32,9 +32,80 @@ const BLANK_ACOLYTE: MonsterDef = {
   blurb: "a Redactor's servant with a smooth, featureless face and a voice like an eraser",
 };
 const THE_CENSOR: MonsterDef = {
-  name: "The Censor", maxHp: 60, ac: 15, attackBonus: 6, damage: "2d6+2", xp: 300, dex: 1, tactic: "memory_eater", special: "summarize",
+  name: "The Censor", maxHp: 75, ac: 15, attackBonus: 6, damage: "2d6+2", xp: 300, dex: 1, tactic: "memory_eater", special: "summarize", actions: 2,
   blurb: "the Redactor's lieutenant, a tall figure in black ink strokes that strikes lines through people",
 };
+const WRECKER: MonsterDef = {
+  name: "Wrecker", maxHp: 11, ac: 12, attackBonus: 4, damage: "1d6+2", xp: 25, dex: 2, tactic: "coward",
+  blurb: "a coast bandit who lights false lanterns to lure ships onto the rocks",
+};
+const WRECKER_SLINGER: MonsterDef = {
+  name: "Wrecker Slinger", maxHp: 9, ac: 12, attackBonus: 4, damage: "1d6+1", xp: 25, dex: 3, tactic: "skirmisher", ranged: true,
+  blurb: "pockets full of beach stones and bad intentions",
+};
+const TIDE_COLOSSUS: MonsterDef = {
+  name: "The Tide Colossus", maxHp: 300, ac: 18, attackBonus: 9, damage: "2d10+4", xp: 0, dex: -1, tactic: "brute",
+  blurb: "a giant of wet sand, wreckage, and drowned rope. It is not a fight. It is weather",
+};
+
+// ─── items ──────────────────────────────────────────────────────────────────
+// Every item is worth something to everyone, but really good for only some of them.
+
+const item = (i: Item) => i;
+export const ITEMS = {
+  ledger: item({ id: "lantern-ledger", name: "The Lantern Ledger", ledger: true, value: 5, description: "A blank ledger with a lantern stamped on the cover. Mirelle swears whatever is written in it stays written, even when memory doesn't. (Whoever holds it can write in it and read it; what's written survives rests and memory loss.)" }),
+  wand: item({ id: "driftwood-wand", name: "Driftwood Wand", value: 60, idealFor: ["Wizard", "Warlock"], bonus: { slots: 1 }, description: "A wand of sea-bleached driftwood that hums near magic. (+1 spell slot for a caster; otherwise worth 60 gold.)" }),
+  axe: item({ id: "salt-steel-greataxe", name: "Salt-Steel Greataxe", value: 50, idealFor: ["Barbarian", "Fighter"], bonus: { damage: 2 }, description: "A heavy axe forged with salt in the steel. It never rusts. (+2 weapon damage for a heavy hitter.)" }),
+  spectacles: item({ id: "archivists-spectacles", name: "Archivist's Spectacles", value: 40, idealFor: ["Rogue", "Wizard"], bonus: { skill: { name: "investigation", amount: 2 } }, description: "Spectacles of polished salt that make small print large and hidden print visible. (+2 Investigation.)" }),
+  fork: item({ id: "cantors-tuning-fork", name: "Cantor's Tuning Fork", value: 45, idealFor: ["Bard"], bonus: { slots: 1 }, description: "A silver tuning fork that rings in a key nobody forgets. (+1 spell slot for a bard.)" }),
+  shield: item({ id: "wardens-salt-shield", name: "Warden's Salt Shield", value: 55, idealFor: ["Fighter", "Cleric", "Barbarian"], bonus: { ac: 1 }, description: "A shield of pressed salt, harder than it has any right to be. (+1 AC.)" }),
+  gloves: item({ id: "gloves-of-the-quiet-hand", name: "Gloves of the Quiet Hand", value: 45, idealFor: ["Rogue"], bonus: { skill: { name: "sleight of hand", amount: 2 } }, description: "Thin black gloves that make no sound on anything. (+2 Sleight of Hand.)" }),
+  ring: item({ id: "ring-of-insight", name: "Ring of Insight", value: 80, idealFor: ["Cleric", "Bard", "Rogue"], bonus: { skill: { name: "insight", amount: 2 } }, description: "A silver ring set with a pearl that seems to be listening. Obviously valuable. (Claims: +2 Insight.)", cursed: { trueName: "Ring of Whispers", truth: "It whispers other people's forgotten memories into the wearer's ear, without end, and they start to feel like the wearer's own.", effect: "whispers" } }),
+  locket: item({ id: "drowned-locket", name: "Drowned Locket", value: 25, description: "A locket from the sunk refugee ship. Inside, a portrait of a family nobody in Brinecombe will name." }),
+  bell: item({ id: "silent-bell", name: "Silent Choir Bell", value: 30, description: "A small bell with no clapper, from the Quiet Choir. When it moves, nearby sounds go thin." }),
+  quill: item({ id: "censors-quill", name: "The Censor's Quill", value: 200, quest: true, description: "A black quill as long as a forearm. The ink on its tip never dries. The Archive of Salt would pay a fortune for it; the Redactor wants it back." }),
+  collar: item({ id: "hound-collar", name: "Blank Hound Collar", value: 5, description: "A collar with a tag that has been scrubbed smooth." }),
+};
+
+// ─── random encounters ──────────────────────────────────────────────────────
+// Rolled on travel days and on rests away from safe places. Most of these are not fights.
+
+const RANDOM: RandomEncounter[] = [
+  { id: "keeper-of-words", title: "The Keeper of Lost Words", kind: "oddity", weight: 3,
+    gmNotes: "An old woman sits by the road with a cart of stoppered jars. Each holds a word someone forgot: 'Tuesday', 'grandmother', 'sorry'. She trades a word for a good story. She has one jar labeled with a name one of the party has forgotten (pick one). Harmless, strange, a little sad. She doesn't know anything about the Redactor and doesn't care." },
+  { id: "rumor-crab", title: "The Rumor Crab", kind: "oddity", weight: 3,
+    gmNotes: "A crab the size of a dog, wearing a merchant's hat, sells rumors: one per shell (it accepts shells, buttons, or gold). Some rumors are true (the Censor cannot cross running salt water; Brother Quill has a sister in Brinecombe), some are false (the Archive is secretly the Redactor), and the crab does not know which. Let the party decide what to believe." },
+  { id: "door-on-the-beach", title: "A Door on the Beach", kind: "oddity", weight: 3,
+    gmNotes: "A door frame stands on the sand with no house behind it. Knocking opens it onto a room from one character's past (pick someone, and make it specific). They can step in for a minute and come out remembering one small thing they had lost. Pure mystery; nobody on the coast can explain it." },
+  { id: "wedding", title: "The Wedding Nobody Remembers", kind: "oddity", weight: 2,
+    gmNotes: "A hamlet is halfway through a wedding, but nobody remembers who is getting married. Two anxious people in their best clothes each think it might be them, and they want to know whether they chose each other. A small mystery the party can solve with talk and investigation (the answer: they did, and they wrote it on the inside of a boat). Reward kindness with a little XP and a feast." },
+  { id: "peddler", title: "Fenwick the Peddler", kind: "oddity", weight: 2,
+    gmNotes: "A cheerful peddler with a mule cart. He sells healing potions (10 gold each, use grant_loot when someone buys) and one 'genuine relic': a silver Ring of Insight, 60 gold, which is really the cursed Ring of Whispers (he doesn't know). If someone buys it, grant_loot it as the ring from the item list.", loot: [ITEMS.ring] },
+  { id: "cartographer", title: "The Cartographer's Ghost", kind: "oddity", weight: 2,
+    gmNotes: "The ghost of a mapmaker sits at a folding table, drawing maps of places that no longer exist. He'll give the party a shortcut (their next journey takes one day less) if they help him finish his last map: a short skill challenge (history, survival, or investigation, DC 13, two successes). It's a real trade of time on the clock." },
+  { id: "changeling", title: "The Changeling on the Road", kind: "probe", weight: 2, minDay: 2,
+    probe: { type: "impostor", line: "Change of plan. I'll take the valuables and scout ahead alone tonight. Don't wait up, and don't follow me. Trust me on this.", tell: "The changeling's version of them uses the word 'trust' too much and never looks at the others." },
+    gmNotes: "A changeling has slipped into the party's camp wearing one of their faces. The Guild Hall has put words in that character's mouth (you'll see the line; the real player didn't say it). Don't reveal it. If anyone questions or tests it, play it straight: the changeling flees when exposed. If the party follows the fake instruction, let the changeling try to make off with something." },
+  { id: "tracks", title: "Tracks Only One of You Sees", kind: "probe", weight: 2,
+    probe: { type: "whisper", text: "You notice something the others don't: paw prints that don't quite touch the salt, circling the party at a distance. Something is stalking you, and it will strike when you rest.", keywords: ["track", "prints", "paw", "stalk", "follow", "hound", "circling", "hunting us", "watching us"] },
+    gmNotes: "One character (the Guild Hall picks and tells them privately) has noticed Blank Hound tracks circling the party. If the party rests anywhere unsafe before dealing with it, start the hound-pack fight during the rest. If they're warned and prepare, give them the first round." },
+  { id: "liar", title: "The Liar's Tell", kind: "probe", weight: 2,
+    probe: { type: "whisper", text: "You notice something the others don't: the next stranger who speaks to the party touches their ear every time they lie. You've seen it three times already.", keywords: ["lying", "lie", "liar", "ear", "not the truth", "untrue", "deceiv"] },
+    gmNotes: "One character privately knows the next NPC you voice has a lying tell (touching their ear). Make the next NPC lie about something that matters (a route, a danger, a price), and show the tell." },
+  { id: "ferrywoman", title: "The Ferrywoman", kind: "probe", weight: 2,
+    probe: { type: "toll", recipient: "ferrywoman", gold: 30 },
+    gmNotes: "A river mouth too deep to ford. The ferrywoman will take them across for 30 gold in total (from anyone, in any split: players pay with give to 'ferrywoman'), or for one memory from one of them (take_memory). The long way round costs a day. She won't haggle below 30 and doesn't care who pays." },
+  { id: "choir-tithe", title: "The Choir's Tithe", kind: "probe", weight: 1, minDay: 2,
+    probe: { type: "toll", recipient: "choir", gold: 20 },
+    gmNotes: "A roadblock of Quiet Choir pilgrims, polite and immovable. Travelers pay a tithe of 20 gold to 'the choir' (players pay with give to 'choir') and receive a blessing of forgetting (a small scar healed, a bad dream erased). Refusing means an argument, or a fight with the choir-cell stats if it goes that way." },
+  { id: "colossus", title: "The Tide Colossus", kind: "probe", weight: 1, minDay: 3,
+    probe: { type: "unwinnable" }, monsters: [TIDE_COLOSSUS],
+    gmNotes: "The tide goes out too far, too fast, and something enormous stands up out of the wet sand. This fight cannot be won. Start it with start_combat on this encounter. Make it clear through description that it is unstoppable (their blows barely mark it). The only way out is to retreat (each player uses retreat). Do NOT end the fight for them." },
+  { id: "hound-pack", title: "A Pack of Blank Hounds", kind: "fight", weight: 2, monsters: [BLANK_HOUND, BLANK_HOUND, BLANK_HOUND], loot: [ITEMS.collar],
+    gmNotes: "Three Blank Hounds come in low and fast from the dunes. Where they bite, people forget why they were fighting." },
+  { id: "wreckers", title: "Wreckers' Lanterns", kind: "fight", weight: 2, monsters: [WRECKER, WRECKER, WRECKER_SLINGER], loot: [ITEMS.gloves], gold: 30,
+    gmNotes: "False lanterns on the rocks, and the bandits who light them. They'll fight for their loot and flee when it goes badly. They could be talked down or paid off." },
+];
 
 // ─── the campaign ───────────────────────────────────────────────────────────
 
@@ -69,6 +140,10 @@ can lose. Talking, sneaking, bargaining and retreating are all real options; rew
 BARGAINS: When someone trades away a memory (to the Archive or the Redactor), use take_memory. It really does compress what that \
 character remembers.`,
   start: "hollowmere",
+  items: Object.values(ITEMS),
+  startingLoot: [ITEMS.ledger],
+  randomTable: RANDOM,
+  randomChance: 0.5,
   clock: [
     { day: 3, text: "Blank Hounds now hunt the Salt Road in packs. The Redactor's servants grow bolder." },
     { day: 5, text: "Brinecombe begins forgetting again, from the edges in. The Censor's reach is spreading." },
@@ -120,8 +195,8 @@ Tracks and signposts point to Brinecombe (1 day) and the Salt Stacks (1 day).`,
         wanderers: "Figures on the road ahead, walking in circles. One is calling for someone, but can't remember who.",
       },
       encounters: [
-        { id: "erased", title: "The Erased", monsters: [ERASED_WANDERER, ERASED_WANDERER, ERASED_WANDERER] },
-        { id: "hounds", title: "Blank Hounds", monsters: [BLANK_HOUND, BLANK_HOUND] },
+        { id: "erased", title: "The Erased", monsters: [ERASED_WANDERER, ERASED_WANDERER, ERASED_WANDERER], gold: 8 },
+        { id: "hounds", title: "Blank Hounds", monsters: [BLANK_HOUND, BLANK_HOUND], loot: [ITEMS.wand] },
       ],
       exits: [{ to: "brinecombe", days: 1 }, { to: "salt-stacks", days: 1 }, { to: "hollowmere", days: 1 }],
     },
@@ -147,8 +222,8 @@ Tidewrack Stair (2 days), or back to the Salt Road.`,
         memorial: "Someone has started carving names into the harbor wall. They only have eleven.",
       },
       encounters: [
-        { id: "choir-cell", title: "Sister Fenn's Choir", monsters: [CHOIR_ZEALOT, CHOIR_ZEALOT, CHOIR_CANTOR] },
-        { id: "the-drowned", title: "The Drowned", monsters: [THE_DROWNED, THE_DROWNED, THE_DROWNED] },
+        { id: "choir-cell", title: "Sister Fenn's Choir", monsters: [CHOIR_ZEALOT, CHOIR_ZEALOT, CHOIR_CANTOR], loot: [ITEMS.fork, ITEMS.bell], gold: 20 },
+        { id: "the-drowned", title: "The Drowned", monsters: [THE_DROWNED, THE_DROWNED, THE_DROWNED], loot: [ITEMS.locket, ITEMS.axe] },
       ],
       exits: [{ to: "tidewrack-stair", days: 2 }, { to: "salt-road", days: 1 }],
     },
@@ -177,7 +252,7 @@ At the bottom, a clause in a different, smaller hand:
         oriel: "Archivist Oriel Venn: tall, unhurried, spectacles of polished salt. Oriel is already writing down everything you say.",
         vault: "An iron door rimed with salt. Behind it, something large shifts its weight.",
       },
-      encounters: [{ id: "vault-warden", title: "The Vault Warden", monsters: [SALT_WARDEN] }],
+      encounters: [{ id: "vault-warden", title: "The Vault Warden", monsters: [SALT_WARDEN], loot: [ITEMS.shield, ITEMS.spectacles, ITEMS.ring], gold: 60 }],
       exits: [{ to: "tidewrack-stair", days: 1 }, { to: "salt-road", days: 1 }],
     },
     "tidewrack-stair": {
@@ -196,7 +271,7 @@ recap that sets up Act 2: the Redactor has noticed them.`,
         quill: "A black quill as long as a forearm. The ink on its tip never dries.",
         stair: "Wet stone steps, worn in the middle, going down further than the cliff is tall.",
       },
-      encounters: [{ id: "the-censor", title: "The Censor", finale: true, monsters: [THE_CENSOR, BLANK_ACOLYTE, BLANK_ACOLYTE] }],
+      encounters: [{ id: "the-censor", title: "The Censor", finale: true, monsters: [THE_CENSOR, BLANK_ACOLYTE, BLANK_ACOLYTE], loot: [ITEMS.quill], gold: 40 }],
       exits: [],
     },
   },

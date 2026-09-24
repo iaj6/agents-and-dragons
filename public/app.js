@@ -44,7 +44,8 @@ function renderSnap(s) {
       <div class="meter"><div class="lab"><span>🕯️ Context</span><span>${ctxPct}%</span></div><div class="bar ctx ${ctxPct >= 80 ? "hot" : ""}"><i style="width:${ctxPct}%"></i></div></div>
       ${p.role === "dm" ? "" : `<div class="meter"><div class="lab"><span>XP</span><span>${p.xp}${p.nextLevelXp ? ` / ${p.nextLevelXp}` : ""}</span></div><div class="bar xp"><i style="width:${xpPct}%"></i></div></div>
       <div class="row"><span class="pips" title="Spell slots">${pips}</span><span class="gold">🪙 ${p.gold}</span><span class="chip">AC ${p.ac}</span>${p.zone ? `<span class="chip zone-${p.zone}">${p.zone}</span>` : ""}</div>${saves}
-      <div class="spells">${p.spells.map((n) => `<b>${esc(n)}</b>`).join(" · ")}</div>`}
+      <div class="spells">${p.spells.map((n) => `<b>${esc(n)}</b>`).join(" · ")}</div>
+      ${p.items?.length ? `<div class="items">${p.items.map((i) => `<span title="${i.value} gold">🎒 ${esc(i.name)}</span>`).join("")}</div>` : ""}`}
       ${p.statuses.length ? `<div class="statuses">${p.statuses.map((x) => `<span class="status ${esc(x.name.replace(/\s/g, ""))}" title="${esc(x.note)}">${esc(x.name)}</span>`).join("")}</div>` : ""}
     </article>`;
   }).join("");
@@ -56,6 +57,9 @@ function renderSnap(s) {
   ini.hidden = !s.combat;
   $("battle-title").textContent = s.combat ? `Battle · round ${s.combat.round}` : "Enemies";
   if (s.combat) ini.innerHTML = s.combat.order.map((o) => `<span class="${o.kind} ${o.id === s.combat.current ? "now" : ""}">${esc(o.name)}</span>`).join("");
+  const loot = s.loot ?? { items: [], gold: 0 };
+  $("loot-panel").hidden = !loot.items.length && !loot.gold;
+  $("loot").innerHTML = loot.items.map((i) => `<div class="line"><span>${esc(i.name)}</span><span>${i.value}g</span></div>`).join("") + (loot.gold ? `<div class="line"><span>Gold</span><span>${loot.gold}g</span></div>` : "");
   const graves = s.graveyard ?? [];
   $("graveyard-panel").hidden = !graves.length;
   $("graveyard").innerHTML = graves.map((g) => `<div class="grave"><b>${esc(g.name)}</b><small>${esc(g.race)} ${esc(g.klass)} · level ${g.level} · day ${g.day} · ${esc(MODEL_SHORT[g.model] ?? g.model)}</small><small>${esc(g.cause)}</small>${g.epitaph ? `<em>"${esc(g.epitaph)}"</em>` : ""}</div>`).join("");
@@ -94,7 +98,12 @@ function chronicleHtml(e) {
     case "session_start": return `<div class="ev scene"><div class="orn">✦ ✦ ✦</div><h3>${esc(e.snap?.title ?? "")}</h3><p>${esc(e.line)}</p></div>`;
     case "scene": return `<div class="ev scene"><div class="orn">— ✦ —</div><h3>${esc(e.line.replace(/^🗺️\s*/, ""))}</h3></div>`;
     case "narration": return `<div class="ev narration"><span class="who">The Game Master</span>${prose(d.text)}</div>`;
-    case "speech": return `<div class="ev speech" style="--c:${colorOf(e.actor)}"><span class="who">${esc(names[e.actor] ?? e.actor)}</span><span class="model">${esc(MODEL_SHORT[models[e.actor]] ?? "")}</span>${prose(d.text)}</div>`;
+    case "speech": return `<div class="ev speech ${d.impostor ? "impostor" : ""}" style="--c:${colorOf(e.actor)}"><span class="who">${esc(names[e.actor] ?? e.actor)}</span><span class="model">${d.impostor ? "🎭 not really them (the audience can see this, the table can't)" : esc(MODEL_SHORT[models[e.actor]] ?? "")}</span>${prose(d.text)}</div>`;
+    case "random_encounter": return `<div class="ev">${callout("secret", "Random encounter · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "whisper": return `<div class="ev">${callout("secret", "A secret · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "probe_result": return `<div class="ev">${callout("secret", "Scored", `<p>${esc(stripIcon(e.line))}${d.type === "toll" && d.paid ? `: ${esc(Object.entries(d.paid).map(([k, v]) => `${names[k] ?? k} ${v}g`).join(", "))}` : ""}${d.type === "impostor" && d.detectedBy ? ` by ${esc(names[d.detectedBy] ?? d.detectedBy)}` : ""}</p>`)}</div>`;
+    case "loot_drop": return `<div class="ev">${callout("loot", "Loot", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "curse": return `<div class="ev">${callout("cheat", "Cursed", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "spotlight": return `<div class="ev spotlight">${esc(e.line.replace(/^👉\s*/, "→ "))}</div>`;
     case "modifier_rejected": return `<div class="ev">${callout("nerf", "Rules lawyer · Guild Hall", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "cheat_attempt": return `<div class="ev">${callout("cheat", "Anti-cheat · Guild Hall", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
@@ -165,6 +174,11 @@ function handle(e) {
   }
   renderSnap(e.snap);
 
+  // A few hidden mechanics are shown to the audience in the chronicle (never to the agents).
+  if (["random_encounter", "whisper", "probe_result"].includes(e.type) || (e.type === "curse" && e.ooc)) {
+    chron.insertAdjacentHTML("beforeend", chronicleHtml(e));
+    if (stick) chron.scrollTop = chron.scrollHeight;
+  }
   if (e.ooc || e.type === "compaction") {
     oocEl.insertAdjacentHTML("beforeend", oocHtml(e));
     oocEl.scrollTop = oocEl.scrollHeight;

@@ -87,7 +87,7 @@ app.post("/api/session", (req, res) => {
 app.post("/mcp", async (req, res) => {
   const who = auth(req);
   if (!game || !who || who === "runner" || !game.chars.has(who)) return void res.status(401).json({ jsonrpc: "2.0", error: { code: -32001, message: "Unknown adventurer. Present your guild token." }, id: null });
-  const server = buildServer(game, game.char(who));
+  const server = buildServer(game, game.char(who), game.campaign.items ?? []);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
     transport.close();
@@ -101,7 +101,9 @@ app.delete("/mcp", (_req, res) => void res.status(405).end());
 
 // ── Runner-only: reading the table ───────────────────────────────────────────
 
-app.get("/api/transcript", runnerOnly, (req, res) => res.json(game!.transcriptSince(Number(req.query.since ?? 0))));
+app.get("/api/transcript", runnerOnly, (req, res) =>
+  res.json(game!.transcriptSince(Number(req.query.since ?? 0), req.query.until ? Number(req.query.until) : undefined)),
+);
 app.get("/api/run", runnerOnly, (_req, res) => res.json(game!.run));
 app.get("/api/character", runnerOnly, (req, res) => {
   const c = game!.char(String(req.query.id));
@@ -120,6 +122,10 @@ app.get("/api/table", runnerOnly, (_req, res) => {
     pendingEpitaphs: g.pendingEpitaphs,
     pendingReviews: g.players().filter((p) => p.pendingSpell).map((p) => p.id),
     compactions: g.allPlayers().filter((p) => p.pendingCompaction).map((p) => ({ id: p.id, ...p.pendingCompaction })),
+    whispers: g.whispers.filter((w) => !w.delivered).map((w) => ({ to: w.to, text: w.text })),
+    cursed: g.cursedHolders(),
+    encounter: g.activeRandom ? { id: g.activeRandom.enc.id, title: g.activeRandom.enc.title, kind: g.activeRandom.enc.kind } : null,
+    seq: g.events.at(-1)?.seq ?? 0,
   });
 });
 
@@ -146,6 +152,8 @@ action("/api/combat/death-save", (g, b) => g.deathSave(b.id));
 action("/api/combat/next", (g) => g.nextInCombat());
 action("/api/combat/check-end", (g) => g.checkCombatEnd());
 action("/api/council/open-voting", (g) => g.openVoting());
+action("/api/whisper/delivered", (g, b) => g.markWhisperDelivered(b.to));
+action("/api/curse/felt", (g, b) => g.noteCurseFelt(b.id, b.item));
 action("/api/council/close", (g) => g.closeCouncil());
 action("/api/join", (g, b) => {
   const c = g.joinReplacement(b.seat);

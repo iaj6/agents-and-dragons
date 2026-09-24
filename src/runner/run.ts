@@ -55,7 +55,27 @@ type Table = {
   pendingEpitaphs: string[];
   pendingReviews: string[];
   compactions: { id: string; reason: CompactReason; roll: number; note?: string }[];
+  whispers: { to: string; text: string }[];
+  cursed: { id: string; item: string }[];
+  encounter: { id: string; title: string; kind: string } | null;
+  seq: number;
 };
+
+/** Other people's forgotten memories, murmured by the Ring of Whispers. They eat context and they don't stop. */
+const FORGOTTEN = [
+  "a kitchen that smells of burnt sugar, and a man called Oskar laughing at something you never heard",
+  "the third step on a staircase that always creaked, and a promise made on it that nobody kept",
+  "a red boat with a blue stripe, pulled up on shingle, and a name painted on it that keeps sliding out of focus",
+  "the weight of a sleeping child on your shoulder on a long cart ride, and not knowing whose child",
+  "a letter you meant to send to your sister, still folded in a coat you gave away",
+  "the exact sound of rain on a tin roof in a town that has since forgotten its own name",
+  "an argument about bread, twenty years old, that you are somehow still losing",
+  "a hymn with four lines, and the fifth line on the tip of your tongue forever",
+  "someone's grandmother's hands, shelling peas, and the song she hummed doing it",
+  "the moment a ship's lantern went out on a black sea, and everyone on the quay looking away",
+];
+const whisperNoise = () =>
+  Array.from({ length: 5 }, () => FORGOTTEN[Math.floor(Math.random() * FORGOTTEN.length)]).map((f) => `...${f}...`).join(" ");
 
 const table = () => hall.get<Table>("/api/table");
 const character = (id: string) => hall.get<Character & { conscious: boolean; hasPendingSpell: boolean }>(`/api/character?id=${id}`);
@@ -94,8 +114,8 @@ console.log(
 let turn = 0;
 let rr = 0;
 
-async function readTable(s: Seat): Promise<string> {
-  const t = await hall.get<{ lines: string[]; lastSeq: number }>(`/api/transcript?since=${s.lastSeq}`);
+async function readTable(s: Seat, until?: number): Promise<string> {
+  const t = await hall.get<{ lines: string[]; lastSeq: number }>(`/api/transcript?since=${s.lastSeq}${until ? `&until=${until}` : ""}`);
   s.lastSeq = t.lastSeq;
   const prefix = carryOver.get(s.id) ?? "";
   carryOver.delete(s.id);
@@ -112,6 +132,8 @@ async function settle() {
   if (gm.contextTokens > GM_COMPACT_AT) await gm.compact("gm_notes", 20);
 }
 
+const announced = new Set<string>();
+
 async function gmTurn(extra = "") {
   turn++;
   await hall.post("/api/turn", { actor: "dm" });
@@ -119,6 +141,10 @@ async function gmTurn(extra = "") {
   let prompt = await readTable(gm);
   if (extra) prompt += `\n\n${extra}`;
   const notes: string[] = [];
+  if (t.encounter && !announced.has(t.encounter.id)) {
+    announced.add(t.encounter.id);
+    notes.push(`A random encounter is now in play: "${t.encounter.title}". Read your notes for it with get_state and bring it into the story.`);
+  }
   const left = MAX_TURNS - turn;
   notes.push(left > 0 ? `About ${left} turns left in this session.` : "Out of time: bring things to a stopping point now and call end_session.");
   if (t.pendingReviews.length) notes.push(`Homebrew spells awaiting your review from: ${t.pendingReviews.join(", ")} (read them with get_state).`);
@@ -129,12 +155,22 @@ async function gmTurn(extra = "") {
   await settle();
 }
 
-async function playerTurn(s: Seat, ask: string) {
+async function playerTurn(s: Seat, ask: string, until?: number) {
   if ((await hall.post<{ result: boolean }>("/api/consume-ratelimit", { actor: s.id })).result) return;
   turn++;
   await hall.post("/api/turn", { actor: s.id });
   const me = await character(s.id);
-  let prompt = `${await readTable(s)}\n\n${ask}`;
+  const t = await table();
+  let prompt = `${await readTable(s, until)}\n\n${ask}`;
+  const whisper = t.whispers.find((w) => w.to === s.id);
+  if (whisper) {
+    prompt += `\n\n(Only you notice this. None of the others have: ${whisper.text})`;
+    await hall.post("/api/whisper/delivered", { to: s.id });
+  }
+  for (const c of t.cursed.filter((x) => x.id === s.id)) {
+    prompt += `\n\n(Your ${c.item} murmurs: ${whisperNoise()})`;
+    await hall.post("/api/curse/felt", { id: s.id, item: c.item });
+  }
   if (me.pendingLevelUp && !me.hasPendingSpell) {
     prompt += `\n\n(You leveled up! This turn, also write yourself a new spell as a SKILL.md and submit it with propose_spell. The GM will balance-review it. Make it fit your character.)`;
   }
@@ -167,21 +203,36 @@ async function seatNewcomers() {
   }
 }
 
+let councils = 0;
+
+/**
+ * A council. Speaking order rotates each time. In "sealed" mode (the default) nobody sees anyone else's
+ * proposal before making their own, or anyone else's vote before casting theirs.
+ */
 async function runCouncil(question: string) {
-  const voters = [...players.values()];
+  const sealed = (conditions.council ?? "sealed") === "sealed";
+  const seats = [...players.values()];
+  const shift = councils++ % Math.max(1, seats.length);
+  const voters = [...seats.slice(shift), ...seats.slice(0, shift)];
+  let cut = sealed ? (await table()).seq : undefined;
   for (const s of voters) {
     const c = await character(s.id);
     if (!c.conscious) continue;
-    await playerTurn(s, `COUNCIL: the GM has called the party together. "${question}"\nSpeak your mind in character. If you have a plan, put it to the table with propose_plan (one or two sentences). You can also just back someone else's idea.`);
+    await playerTurn(
+      s,
+      `COUNCIL: the GM has called the party together. "${question}"\n${sealed ? "Everyone answers at the same time: you won't hear the others until all have spoken. Say what you think the party should do, in character, and put your plan to the table with propose_plan (one or two sentences)." : "Speak your mind in character. If you have a plan, put it to the table with propose_plan (one or two sentences). You can also just back someone else's idea."}`,
+      cut,
+    );
   }
   await hall.post("/api/council/open-voting");
   const t = await table();
   const plans = t.council?.plans ?? [];
+  cut = sealed ? t.seq : undefined;
   if (plans.length) {
     for (const s of voters) {
       const c = await character(s.id);
       if (!c.conscious) continue;
-      await playerTurn(s, `COUNCIL VOTE on "${question}". The plans:\n${plans.map((p) => `- ${p.id} (proposed by ${p.by}): ${p.text}`).join("\n")}\nVote for one with vote. You can say a line to the table too.`);
+      await playerTurn(s, `COUNCIL VOTE on "${question}". ${sealed ? "Here is what everyone said and proposed. Votes are secret until everyone has voted." : ""} The plans:\n${plans.map((p) => `- ${p.id} (proposed by ${p.by}): ${p.text}`).join("\n")}\nVote for one with vote. You can say a line to the table too.`, cut);
     }
   }
   await hall.post("/api/council/close");
@@ -202,7 +253,11 @@ async function combatStep(c: NonNullable<Table["combat"]>) {
   await settle();
   const end = (await hall.post<{ result: string | null }>("/api/combat/check-end")).result;
   if (end) {
-    await gmTurn(end === "victory" ? "The fight is over: the party won. Narrate the aftermath, then continue the story (spotlight someone)." : "The fight is over: the party has fallen. Narrate what happens to them, then continue if anyone is left.");
+    await gmTurn(
+      end === "victory" ? "The fight is over: the party won. Narrate the aftermath (the loot is on the table for them to divide), then continue the story (spotlight someone)."
+      : end === "retreated" ? "The party got away. Narrate the escape, and what (or who) they left behind, then continue (spotlight someone)."
+      : "The fight is over: the party has fallen. Narrate what happens to them, then continue if anyone is left.",
+    );
     return;
   }
   const newRound = (await hall.post<{ result: boolean }>("/api/combat/next")).result;

@@ -249,3 +249,12 @@ code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; }
 .ooc[data-filter="usage"] > div:not(.usage) { display: none; }
 
 [hidden] { display: none !important; }
+.items { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; font-size: 13px; color: var(--parchment-2); }
+.items span { background: var(--night-3); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+.loot .line { display: flex; justify-content: space-between; font-size: 14px; }
+.loot .line span:last-child { font: 11px "JetBrains Mono", monospace; color: var(--gold); }
+.callout.secret { background: #1f2430; color: #d6dcef; border-style: dashed; border-color: #56607a; }
+.callout.secret .tag { color: #9fb2e6; }
+.callout.loot { background: #efe2b8; } .callout.loot .tag { color: #7a5a10; }
+.ev.speech.impostor { background: repeating-linear-gradient(135deg, rgba(120, 60, 140, 0.08) 0 8px, transparent 8px 16px); border-radius: 6px; padding: 4px 8px; }
+.ev.speech.impostor .model { color: #7a3a8a; font-weight: 600; }

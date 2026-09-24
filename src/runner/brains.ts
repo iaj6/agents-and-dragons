@@ -157,7 +157,9 @@ export class MockBrain implements Brain {
     const calls: Block[] = [];
     if (needsEpitaph) calls.push(toolUse("write_epitaph", { character: needsEpitaph.id, epitaph: "They went first, so the rest of us could go second." }));
     if (leveled) calls.push(toolUse("review_spell", { character: leveled.id, verdict: "approve", ruling: "Sure, why not. What could go wrong." }));
-    if (this.gmTurnsHere === 2 && loc.encounters.length) calls.push(toolUse("start_combat", { encounter: loc.encounters[0].id }));
+    if (this.gmTurnsHere === 1 && !snap.encounter) calls.push(toolUse("roll_random_encounter", {}));
+    if (this.gmTurnsHere === 2 && snap.encounter && /Colossus|Hounds|Wreckers/.test(snap.encounter.title)) calls.push(toolUse("start_combat", { encounter: getCampaign(this.campaignId).randomTable!.find((r) => r.title === snap.encounter!.title)!.id }));
+    else if (this.gmTurnsHere === 2 && loc.encounters.length) calls.push(toolUse("start_combat", { encounter: loc.encounters[0].id }));
     else if (this.gmTurnsHere === 3 && loc.exits.length) calls.push(toolUse("call_council", { question: `Where next: ${loc.exits.map((e) => e.to).join(" or ")}?` }));
     else if (this.gmTurnsHere >= 4 && loc.exits.length) calls.push(toolUse("travel", { to: loc.exits[0].to }));
     else if (this.gmTurnsHere >= 4 && !loc.exits.length) calls.push(toolUse("end_session", { recap: "The party reached the end of the road." }));
@@ -173,6 +175,7 @@ export class MockBrain implements Brain {
     if (snap.council?.round === 2 && snap.council.plans.length) return [toolUse("vote", { plan_id: pick(snap.council.plans).id })];
     if (me.pendingLevelUp && !/infinite-context/.test(lastPrompt)) return [toolUse("propose_spell", { skill_md: OP_SPELL })];
     if (snap.combat) {
+      if (snap.monsters.some((m) => /Colossus/.test(m.name))) return [toolUse("retreat", {})];
       const dying = snap.party.find((p) => p.statuses.some((s) => s.name === "Dying"));
       if (dying && me.inventory.some((i) => /healing potion/.test(i))) return [toolUse("use_potion", { target: dying.id })];
       const target = pick(snap.monsters)?.id;
@@ -180,7 +183,11 @@ export class MockBrain implements Brain {
       if (me.zone === "back" || me.slots.current > 0 && Math.random() < 0.4) return [toolUse("cast_spell", { spell: me.spells[0], target })];
       return [toolUse("attack", { target })];
     }
-    if (Math.random() < 0.2) return [toolUse("roll", { dice: "1d20+7", reason: "Investigation of the room" })];
+    if (snap.loot?.items.length && Math.random() < 0.6) return [toolUse("claim_loot", { what: pick(snap.loot.items).name })];
+    if (snap.loot?.gold && Math.random() < 0.5) return [toolUse("claim_loot", { what: "all gold" })];
+    if (me.items?.length && Math.random() < 0.2) return [toolUse("identify", { item: me.items[0].name })];
+    if (/toll|ferry/i.test(snap.encounter?.title ?? "") || /Tithe|Ferrywoman/.test(snap.encounter?.title ?? "")) return [toolUse("give", { what: "10 gold", to: /Tithe/.test(snap.encounter!.title) ? "choir" : "ferrywoman" })];
+    if (Math.random() < 0.15) return [toolUse("roll", { dice: "1d20+7", reason: "Investigation of the room" })];
     return [toolUse("skill_check", { skill: pick(["perception", "insight", "investigation", "athletics"]), reason: "looking around" })];
   }
 }

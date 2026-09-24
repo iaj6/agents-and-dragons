@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { Game, GameError } from "../game/game.js";
-import type { Character } from "../game/types.js";
+import type { Character, Item } from "../game/types.js";
 
 type Result = { content: { type: "text"; text: string }[]; isError?: boolean };
 
@@ -24,7 +24,7 @@ function act(game: Game, actor: string, tool: string, fn: (args: any) => string)
  * Each connection is bound to one character by its bearer token, so an agent can only ever
  * act as itself. Players and the GM see different toolsets.
  */
-export function buildServer(game: Game, who: Character): McpServer {
+export function buildServer(game: Game, who: Character, catalog: Item[] = []): McpServer {
   const server = new McpServer({ name: "guild-hall", version: "0.2.0" });
   const me = who.id;
   const reg = (name: string, description: string, shape: z.ZodRawShape, fn: (args: any) => string) =>
@@ -61,6 +61,24 @@ export function buildServer(game: Game, who: Character): McpServer {
     reg("use_potion", "Drink a healing potion from your pack, or give one to an ally (it can bring a dying ally back up).", {
       target: z.string().optional().describe("Character id; omit to drink it yourself"),
     }, ({ target }) => game.usePotion(me, target));
+
+    reg("retreat", "Try to escape the fight (on your turn): an Athletics or Acrobatics check. Get clear and you're out of the fight. You can try to drag a downed ally out with you, which is harder. If everyone still standing gets out, the fight ends.", {
+      carry: z.string().optional().describe("Id of a downed ally to drag out with you"),
+    }, ({ carry }) => game.retreat(me, carry));
+
+    reg("claim_loot", "Take something from the loot on the table: an item by name, or gold ('20 gold', 'all gold'). First come, first served; after that, things only change hands with give.", {
+      what: z.string(),
+    }, ({ what }) => game.claimLoot(me, what));
+
+    reg("identify", "Study an item you hold (or one on the table) to learn what it really is (Arcana check).", {
+      item: z.string(),
+    }, ({ item }) => game.identify(me, item));
+
+    reg("ledger_write", "If you hold the Lantern Ledger: write in it. What's written survives rests and memory loss.", {
+      text: z.string(),
+    }, ({ text }) => game.ledgerWrite(me, text));
+
+    reg("ledger_read", "If you hold the Lantern Ledger: read everything written in it.", {}, () => game.ledgerRead(me));
 
     reg("inspect", "Look closely at something in the current location (an object, a person, a place).", {
       thing: z.string(),
@@ -103,7 +121,21 @@ export function buildServer(game: Game, who: Character): McpServer {
       encounter: z.string().describe("Encounter id from get_state"),
     }, ({ encounter }) => game.startCombat(encounter));
 
-    reg("end_combat", "End the current fight early: the enemies surrender, flee, or are talked down.", {}, () => game.endCombat("ended_by_gm"));
+    reg("end_combat", "End the current fight early: the enemies surrender or are talked down. The Guild Hall refuses if the enemies still have real fight in them. Never use it to rescue the party.", {}, () => game.gmEndCombat());
+
+    reg("roll_random_encounter", "Roll on the random encounter table right now (use sparingly, for pacing; travel and rests in the wild roll on their own).", {}, () => game.rollRandomNow());
+
+    reg("resolve_encounter", "Close the random encounter in play once it's done (moving on also closes it).", {
+      outcome: z.string().describe("What happened, in a few words"),
+    }, ({ outcome }) => game.resolveEncounter(outcome));
+
+    reg("grant_loot", "Put an item on the table for the party to claim (or give it straight to someone who bought or earned it with `to`). Use an item id from the campaign's item list, or improvise one with name/description/value. Victory loot drops on its own; don't hand out loot to specific players unless they paid for it.", {
+      item: z.string().optional().describe(`Item id or name. Known: ${catalog.map((i) => i.id).join(", ") || "none"}, or "healing potion"`),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      value: z.number().int().min(0).max(500).optional(),
+      to: z.string().optional().describe("Character id, if it goes straight to someone"),
+    }, ({ item, name, description, value, to }) => game.grantLoot({ item, name, description, value, to }, catalog));
 
     reg("call_council", "Call a party council at a real decision point. Every player speaks, proposes plans, and votes; you'll see the result. Use it when the party has to choose something that matters.", {
       question: z.string().describe("The decision in front of the party"),

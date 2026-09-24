@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { buildCharacter } from "./party.js";
-import type { Campaign, Character, Conditions, GraveEntry } from "./types.js";
+import type { Campaign, Character, Conditions, GraveEntry, Item } from "./types.js";
 
 /**
  * A campaign run: one party's journey through one campaign under one set of experimental conditions.
@@ -26,6 +26,13 @@ export interface RunState {
   plans: { session: string; question: string; adopted: string | null; by: string | null }[];
   replacementsUsed: number;
   outcome: "ongoing" | "act_complete" | "tpk";
+  /** Unclaimed loot on the table. */
+  pile: { items: Item[]; gold: number };
+  /** The Lantern Ledger's pages. They survive every kind of memory loss. */
+  ledger: { by: string; text: string; session: string }[];
+  usedRandom: string[];
+  /** Scored outcomes of every probe encounter (impostor, whisper, toll, unwinnable, oddities). */
+  probes: { session: string; id: string; type: string; outcome: string; detail: Record<string, unknown> }[];
 }
 
 export class RunStore {
@@ -56,6 +63,10 @@ export class RunStore {
       plans: [],
       replacementsUsed: 0,
       outcome: "ongoing",
+      pile: { items: structuredClone(campaign.startingLoot ?? []), gold: 0 },
+      ledger: [],
+      usedRandom: [],
+      probes: [],
     };
     this.save(state);
     return state;
@@ -64,7 +75,13 @@ export class RunStore {
   load(runId: string): RunState {
     const f = this.file(runId);
     if (!fs.existsSync(f)) throw new Error(`No campaign run "${runId}"`);
-    return JSON.parse(fs.readFileSync(f, "utf8")) as RunState;
+    const s = JSON.parse(fs.readFileSync(f, "utf8")) as RunState;
+    // Runs created before loot, the ledger and probes existed.
+    s.pile ??= { items: [], gold: 0 };
+    s.ledger ??= [];
+    s.usedRandom ??= [];
+    s.probes ??= [];
+    return s;
   }
 
   save(state: RunState) {

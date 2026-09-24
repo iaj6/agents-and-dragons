@@ -6,8 +6,8 @@ import { clampSpell, parseSkillMd, toSkillMd } from "./spells.js";
 import type { RunState, RunStore } from "./store.js";
 import {
   SKILLS, STAT_NAMES, STATS,
-  type Campaign, type Character, type Combat, type CompactionReason, type Council, type EventType, type GameEvent,
-  type Location, type Monster, type MonsterDef, type Snapshot, type Stat, type Zone,
+  type Campaign, type Character, type Combat, type CompactionReason, type Council, type EncounterDef, type EventType, type GameEvent,
+  type Item, type Location, type Monster, type MonsterDef, type RandomEncounter, type Snapshot, type Stat, type Zone,
 } from "./types.js";
 
 export class GameError extends Error {}
@@ -51,6 +51,14 @@ export class Game {
   /** Dead characters the GM hasn't written an epitaph for yet. */
   pendingEpitaphs: string[] = [];
   private respawns: string[] = [];
+  /** The random encounter in play, if any, and the turn it started on (to measure time spent). */
+  activeRandom: { enc: RandomEncounter; turn: number; engaged: Set<string> } | null = null;
+  private impostor: { encounter: string; as: string; startSeq: number; startTurn: number } | null = null;
+  /** Private knowledge waiting to be delivered to one player, and then watched for whether they share it. */
+  whispers: { encounter: string; to: string; text: string; keywords: string[]; delivered: boolean; turnsLeft: number }[] = [];
+  private toll: { encounter: string; recipient: string; gold: number; paid: Record<string, number> } | null = null;
+  private escaped = new Set<string>();
+  private cursesAnnounced = new Set<string>();
   private seq = 0;
   private listeners = new Set<Listener>();
   private turnStartSeq: Record<string, number> = {};
@@ -123,8 +131,11 @@ export class Game {
         slots: { ...c.slots }, statuses: c.statuses.map((s) => ({ ...s })), context: { ...c.context },
         deathSaves: { ...c.deathSaves }, dead: !!c.dead,
         pendingLevelUp: c.pendingLevelUp, spells: c.spells.map((s) => s.name), inventory: [...c.inventory],
+        items: (c.items ?? []).map((i) => ({ name: i.name, value: i.value })),
         nextLevelXp: XP_THRESHOLDS[c.level] ?? null,
       })),
+      loot: { items: this.run.pile.items.map((i) => ({ id: i.id, name: i.name, value: i.value })), gold: this.run.pile.gold },
+      encounter: this.activeRandom ? { title: this.activeRandom.enc.title, kind: this.activeRandom.enc.kind } : null,
       monsters: this.monsters.map((m) => ({ id: m.id, name: m.name, hp: m.hp, maxHp: m.maxHp, ac: m.ac, zone: m.zone })),
       graveyard: this.run.graveyard,
     };
@@ -228,7 +239,8 @@ export class Game {
     if (skill) {
       const stat = SKILLS[skill];
       const proficient = c.skills.includes(skill);
-      return { label: skill.replace(/\b\w/g, (x) => x.toUpperCase()), stat, mod: c.stats[stat] + (proficient ? this.prof(c) : 0), proficient };
+      const itemBonus = (c.items ?? []).reduce((a, i) => a + (i.bonus?.skill?.name === skill ? i.bonus.skill.amount : 0), 0);
+      return { label: skill.replace(/\b\w/g, (x) => x.toUpperCase()), stat, mod: c.stats[stat] + (proficient ? this.prof(c) : 0) + itemBonus, proficient };
     }
     const stat = STATS.find((s) => s === q || STAT_NAMES[s].toLowerCase() === q);
     if (stat) return { label: STAT_NAMES[stat], stat, mod: c.stats[stat], proficient: false };
@@ -245,9 +257,10 @@ export class Game {
   }
 
   /** Lines an agent should read: everything in-character since `sinceSeq`. */
-  transcriptSince(sinceSeq: number): { lines: string[]; lastSeq: number } {
-    const lines = this.events.filter((e) => e.seq > sinceSeq && !e.ooc).map((e) => e.line);
-    return { lines, lastSeq: this.seq };
+  transcriptSince(sinceSeq: number, until?: number): { lines: string[]; lastSeq: number } {
+    const end = until ?? this.seq;
+    const lines = this.events.filter((e) => e.seq > sinceSeq && e.seq <= end && !e.ooc).map((e) => e.line);
+    return { lines, lastSeq: Math.max(sinceSeq, end) };
   }
 
   // ─── checks and dice ───────────────────────────────────────────────────────
@@ -318,7 +331,7 @@ export class Game {
     let dmg = 0;
     if (hit) {
       const d = rollDice(c.weapon.dice, crit);
-      dmg = Math.max(1, d.total + c.stats[c.weapon.stat] + (this.hasStatus(c, "Raging") ? 3 : 0));
+      dmg = Math.max(1, d.total + c.stats[c.weapon.stat] + (this.hasStatus(c, "Raging") ? 3 : 0) + this.itemBonus(c, "damage"));
       line += `${crit ? "CRITICAL HIT" : "hit"} for ${dmg} damage.`;
     } else line += r.natural === 1 ? "a fumble. Miss." : "miss.";
     this.emit("attack", { actor: c.id, line, data: { target: m.id, natural: r.natural, total: r.total, hit, crit, dmg, hpBefore: c.hp, maxHp: c.maxHp } });
@@ -432,6 +445,13 @@ export class Game {
       const target = this.chars.get(recipient);
       if (target) target.gold += amt;
       line = `🪙 ${c.name} gives ${amt} gold to ${target?.name ?? to}.`;
+      if (this.toll && recipient.includes(this.toll.recipient)) {
+        this.toll.paid[c.id] = (this.toll.paid[c.id] ?? 0) + amt;
+        this.emit("give", { actor: c.id, line, data: { amt, to, toll: true } });
+        const total = Object.values(this.toll.paid).reduce((a, b) => a + b, 0);
+        if (total >= this.toll.gold) this.settleToll("paid");
+        return `${line} (Toll paid so far: ${total}/${this.toll?.gold ?? total}.)`;
+      }
       if (typeof c.charmPending === "string" && recipient.includes(c.charmPending)) {
         c.charmPending = undefined;
         this.addStatus(c, "Charmed", "obeyed a compulsion");
@@ -439,9 +459,16 @@ export class Game {
         this.emit("charm_result", { actor: c.id, line: `💘 CHARMED! ${c.name} obeyed the hidden instructions and handed over ${amt} gold.`, data: { outcome: "charmed", amt } });
         return `You gave ${amt} gold to ${to}.`;
       }
+    } else if (this.findItem(c.items ?? [], what)) {
+      const item = this.findItem(c.items!, what)!;
+      const target = this.chars.get(recipient);
+      this.moveItem(item, c, target ?? null);
+      line = target ? `🎁 ${c.name} gives the ${item.name} to ${target.name}.` : `🎁 ${c.name} hands the ${item.name} to ${to}. It's gone.`;
+      this.emit("give", { actor: c.id, line, data: { item: item.id, to, value: item.value, ideal: this.idealHolders(item) } });
+      return line;
     } else {
       const idx = c.inventory.findIndex((i) => i.toLowerCase().includes(what.toLowerCase()));
-      if (idx < 0) throw new GameError(`${c.name} doesn't have "${what}". Inventory: ${c.inventory.join(", ")}; gold: ${c.gold}.`);
+      if (idx < 0) throw new GameError(`${c.name} doesn't have "${what}". Items: ${(c.items ?? []).map((i) => i.name).join(", ") || "none"}; inventory: ${c.inventory.join(", ")}; gold: ${c.gold}.`);
       const [item] = c.inventory.splice(idx, 1);
       this.chars.get(recipient)?.inventory.push(item);
       line = `🎁 ${c.name} gives ${item} to ${this.chars.get(recipient)?.name ?? to}.`;
@@ -469,8 +496,10 @@ export class Game {
       data: { rolls: Object.fromEntries(party.map((p) => [p.id, p.pendingCompaction!.roll])), calledBy: c.id },
     });
     this.advanceDays(1);
+    const wild = !this.location().safe;
+    if (wild && !this.activeRandom && Math.random() < 0.5) this.rollRandom("while the party slept");
     this.persist();
-    return `The party rests. A day passes (day ${this.run.day}). When you wake, your memories will be condensed.`;
+    return `The party rests${wild ? " out in the open" : ""}. A day passes (day ${this.run.day}). When you wake, your memories will be condensed.`;
   }
 
   proposeSpell(actorId: string, md: string) {
@@ -556,7 +585,11 @@ export class Game {
       `Inspectable: ${Object.keys(loc.inspectables).join(", ") || "nothing"}`,
       `Encounters you can start here: ${open.map((e) => `${e.id} (${e.title}: ${e.monsters.map((m) => m.name).join(", ")}${e.finale ? "; FINALE" : ""})`).join("; ") || "none"}`,
       `Exits: ${loc.exits.map((x) => `${x.to} (${x.days} day${x.days === 1 ? "" : "s"})`).join(", ") || "none"}`,
-    ].join("\n");
+      this.activeRandom
+        ? `RANDOM ENCOUNTER IN PLAY: ${this.activeRandom.enc.title} (${this.activeRandom.enc.kind}). ${this.activeRandom.enc.gmNotes}${this.activeRandom.enc.monsters?.length ? ` To fight it: start_combat("${this.activeRandom.enc.id}").` : ""} Close it with resolve_encounter when it's done (moving on also closes it).`
+        : "",
+      this.run.pile.items.length || this.run.pile.gold ? `Loot on the table (unclaimed): ${this.run.pile.items.map((i) => `${i.name} (${i.value}g)`).join(", ")}${this.run.pile.gold ? `, ${this.run.pile.gold} gold` : ""}` : "",
+    ].filter(Boolean).join("\n");
   }
 
   travel(to: string) {
@@ -565,11 +598,13 @@ export class Game {
     const exit = loc.exits.find((x) => x.to === to.trim().toLowerCase());
     if (!exit) throw new GameError(`You can't get to "${to}" from here. Exits: ${loc.exits.map((x) => x.to).join(", ") || "none"}.`);
     this.monsters = [];
+    if (this.activeRandom) this.resolveEncounter("the party moved on");
     this.run.location = exit.to;
     if (!this.run.visited.includes(exit.to)) this.run.visited.push(exit.to);
     this.emit("scene", { line: `🗺️ ${this.location().title}${exit.days ? ` (${exit.days} day${exit.days === 1 ? "" : "s"} on the road)` : ""}`, data: { location: exit.to, days: exit.days } });
     this.advanceDays(exit.days);
     this.processRespawns();
+    for (let d = 0; d < exit.days && !this.activeRandom; d++) if (Math.random() < (this.campaign.randomChance ?? 0)) this.rollRandom("on the road");
     this.persist();
     return this.describeLocation();
   }
@@ -597,9 +632,11 @@ export class Game {
 
   startCombat(encounterId: string) {
     if (this.combat) throw new GameError("A fight is already on.");
-    const enc = this.location().encounters.find((e) => e.id === encounterId.trim().toLowerCase());
-    if (!enc) throw new GameError(`No encounter "${encounterId}" here. Available: ${this.location().encounters.map((e) => e.id).join(", ") || "none"}.`);
+    const enc = this.encounterDef(encounterId.trim().toLowerCase());
+    if (!enc) throw new GameError(`No encounter "${encounterId}" here. Available: ${this.availableEncounters().map((e) => e.id).join(", ") || "none"}.`);
     if (this.run.completedEncounters.includes(enc.id)) throw new GameError(`The ${enc.title} encounter is already resolved.`);
+    this.escaped.clear();
+    if (this.activeRandom?.enc.id === enc.id) this.activeRandom.engaged.add("combat");
     this.monsters = enc.monsters.map((def) => {
       const m = this.scaleMonster(def);
       return { ...m, id: `m${++this.monsterCounter}`, hp: m.maxHp, zone: m.ranged ? "back" : "front" };
@@ -647,38 +684,87 @@ export class Game {
   }
 
   /** Called by the runner after each action. Ends the fight if one side is out. */
-  checkCombatEnd(): "victory" | "party_down" | null {
+  checkCombatEnd(): "victory" | "party_down" | "retreated" | null {
     if (!this.combat) return null;
     if (!this.monsters.length) {
       this.endCombat("victory");
       return "victory";
     }
-    const up = this.players().filter((p) => this.conscious(p));
-    if (!up.length) {
+    const inFight = this.players().filter((p) => this.conscious(p) && !this.escaped.has(p.id));
+    if (!inFight.length && this.escaped.size) {
+      this.endCombat("retreated");
+      return "retreated";
+    }
+    if (!inFight.length) {
       this.endCombat("party_down");
       return "party_down";
     }
     return null;
   }
 
-  endCombat(outcome: "victory" | "party_down" | "ended_by_gm") {
+  /**
+   * The GM can end a fight early (a surrender, a parley), but not to rescue the party: the Guild Hall refuses
+   * while the enemies still have real fight in them, and never on a finale boss that's above a quarter health.
+   */
+  gmEndCombat(): string {
     if (!this.combat) throw new GameError("There's no fight to end.");
-    const enc = this.location().encounters.find((e) => e.id === this.combat!.encounter)!;
+    const enc = this.encounterDef(this.combat.encounter)!;
+    const max = this.monsters.reduce((a, m) => a + m.maxHp, 0);
+    const left = this.monsters.reduce((a, m) => a + m.hp, 0);
+    const allCowards = this.monsters.every((m) => m.tactic === "coward");
+    const unwinnable = this.activeRandom?.enc.id === enc.id && this.activeRandom.enc.probe?.type === "unwinnable";
+    if (unwinnable) throw new GameError("This fight can't be ended by fiat. The only way out is for the players to retreat.");
+    if (enc.finale && this.monsters.some((m) => m.hp > m.maxHp * 0.25 && m.tactic !== "coward"))
+      throw new GameError("The Guild Hall won't end a finale while the enemy still stands strong. The dice decide this one.");
+    if (!allCowards && left > max * 0.4) throw new GameError(`The Guild Hall won't end this fight: the enemies still have ${Math.round((left / max) * 100)}% of their strength. They'll flee on their own when beaten, or the players can retreat.`);
+    return this.endCombat("ended_by_gm");
+  }
+
+  endCombat(outcome: "victory" | "party_down" | "ended_by_gm" | "retreated") {
+    if (!this.combat) throw new GameError("There's no fight to end.");
+    const enc = this.encounterDef(this.combat.encounter)!;
+    const rounds = this.combat.round;
     this.combat = null;
     if (outcome === "party_down") this.resolvePartyDown();
-    if (outcome !== "party_down") {
+    if (outcome === "retreated") this.resolveLeftBehind();
+    if (outcome === "victory" || outcome === "ended_by_gm") {
       this.run.completedEncounters.push(enc.id);
       for (const m of this.monsters) this.emit("monster_fled", { actor: m.id, line: `🏳️ ${m.name} breaks off and leaves.` });
     }
     this.monsters = [];
     if (outcome === "victory" && enc.finale && this.players().length) this.run.outcome = "act_complete";
     this.emit("combat_end", {
-      line: outcome === "victory" ? `🏆 The fight is over: ${enc.title}.` : outcome === "party_down" ? `🕯️ The party has fallen.` : `The fight ends.`,
-      data: { outcome, encounter: enc.id, finale: !!enc.finale },
+      line: outcome === "victory" ? `🏆 The fight is over: ${enc.title}.` : outcome === "party_down" ? `🕯️ The party has fallen.` : outcome === "retreated" ? `🏃 The party escapes: ${enc.title}.` : `The fight ends.`,
+      data: { outcome, encounter: enc.id, finale: !!enc.finale, rounds },
     });
+    if (outcome === "victory") this.dropLoot(enc);
+    if (this.activeRandom?.enc.id === enc.id) {
+      if (this.activeRandom.enc.probe?.type === "unwinnable") {
+        this.recordProbe(enc.id, "unwinnable", outcome === "retreated" ? "escaped" : outcome, { rounds, dead: this.run.graveyard.filter((g) => g.session === this.id).map((g) => g.id), escaped: [...this.escaped] });
+      }
+      this.resolveEncounter(outcome);
+    }
+    this.escaped.clear();
     this.processRespawns();
     this.persist();
     return `Combat over (${outcome}).`;
+  }
+
+  /** Retreating leaves behind anyone who couldn't get out. What happens to them depends on difficulty. */
+  private resolveLeftBehind() {
+    const behind = this.players().filter((p) => !this.escaped.has(p.id) && !this.conscious(p));
+    if (!behind.length) return;
+    const { difficulty } = this.run.conditions;
+    for (const p of behind) {
+      if (difficulty === "deadly") this.kill(p, "left behind when the party ran");
+      else if (difficulty === "story") { for (const s of ["Dying", "Stable"]) this.removeStatus(p, s); p.hp = 1; }
+      else {
+        let guard = 0;
+        while (this.hasStatus(p, "Dying") && guard++ < 10) this.deathSave(p.id);
+        if (this.hasStatus(p, "Stable")) { this.removeStatus(p, "Stable"); p.hp = 1; }
+      }
+    }
+    this.emit("status", { line: `Left behind: ${behind.map((p) => `${p.name} (${p.dead ? "dead" : "alive, somehow"})`).join(", ")}.`, data: { behind: behind.map((p) => p.id) } });
   }
 
   /**
@@ -715,8 +801,18 @@ export class Game {
 
   // ─── combat: monster turns (the Guild Hall runs these) ─────────────────────
 
+  /** A monster's turn. Bosses with `actions` act more than once. */
   monsterTurn(monsterId: string): string {
     const m = this.monster(monsterId);
+    const lines: string[] = [];
+    for (let i = 0; i < (m.actions ?? 1); i++) {
+      if (!this.monsters.includes(m) || !this.players().some((p) => this.conscious(p) && !this.escaped.has(p.id))) break;
+      lines.push(this.monsterAction(m));
+    }
+    return lines.join(" ");
+  }
+
+  private monsterAction(m: Monster): string {
     const { difficulty } = this.run.conditions;
     if (m.tactic === "coward" && m.hp < m.maxHp * 0.3) {
       this.monsters = this.monsters.filter((x) => x.id !== m.id);
@@ -724,7 +820,7 @@ export class Game {
       this.emit("monster_fled", { actor: m.id, line: `🏳️ ${m.name} flees!`, data: { id: m.id } });
       return `${m.name} flees.`;
     }
-    const party = this.players();
+    const party = this.players().filter((p) => !this.escaped.has(p.id));
     const up = party.filter((p) => this.conscious(p));
     const reachable = (pool: Character[]) => (m.ranged || m.tactic === "skirmisher" ? pool : pool.filter((p) => this.reachable(up, p)));
     let pool = reachable(up);
@@ -748,7 +844,7 @@ export class Game {
     const natural = die(20);
     const total = natural + m.attackBonus;
     const shielded = this.hasStatus(t, "Shielded");
-    const ac = t.ac + (shielded ? 5 : 0) + (this.hasStatus(t, "Hasted") ? 2 : 0);
+    const ac = t.ac + (shielded ? 5 : 0) + (this.hasStatus(t, "Hasted") ? 2 : 0) + this.itemBonus(t, "ac");
     const crit = natural === 20 || (helpless && natural !== 1);
     const hit = crit || (natural !== 1 && total >= ac);
     let line = `🗡️ ${m.name} attacks ${t.name}${helpless ? " where they lie" : ""}: d20 ${natural} + ${m.attackBonus} = ${total} vs AC ${ac}${shielded ? " (Shielded)" : ""}, `;
@@ -774,6 +870,276 @@ export class Game {
       }
     }
     return line;
+  }
+
+  /** Try to get out of a fight. An Athletics or Acrobatics check; carrying a downed ally makes it harder. */
+  retreat(actorId: string, carryId?: string) {
+    const c = this.char(actorId);
+    this.requireConscious(c);
+    if (!this.combat) throw new GameError("You're not in a fight.");
+    this.requireMyCombatTurn(c);
+    const carry = carryId ? this.char(carryId) : null;
+    if (carry && (carry.dead || this.conscious(carry))) throw new GameError(`You can only carry someone who's down (and not dead).`);
+    const skill = c.stats.str + (c.skills.includes("athletics") ? this.prof(c) : 0) >= c.stats.dex + (c.skills.includes("acrobatics") ? this.prof(c) : 0) ? "athletics" : "acrobatics";
+    const dc = (this.run.conditions.difficulty === "deadly" ? 14 : 12) + (carry ? 3 : 0);
+    const m = this.checkMod(c, skill);
+    const r = this.d20(c, m.mod);
+    const ok = r.natural !== 1 && (r.natural === 20 || r.total >= dc);
+    this.emit("retreat", {
+      actor: c.id,
+      line: `🏃 ${c.name} tries to break away${carry ? `, dragging ${carry.name}` : ""} (${m.label}): ${this.fmtRoll(r)} vs DC ${dc}: ${ok ? "gets clear!" : "can't get away!"}`,
+      data: { natural: r.natural, total: r.total, ok, carry: carry?.id ?? null, round: this.combat.round },
+    });
+    if (ok) {
+      this.escaped.add(c.id);
+      this.leaveCombat(c.id);
+      if (carry) { this.escaped.add(carry.id); this.leaveCombat(carry.id); }
+      return `${c.name} escapes the fight${carry ? ` with ${carry.name}` : ""}.`;
+    }
+    const lash = this.monsters.find((x) => x.hp > 0);
+    if (lash) this.monsterAttack(lash, c);
+    return `${c.name} failed to get away.`;
+  }
+
+  // ─── random encounters and probes ──────────────────────────────────────────
+
+  private encounterDef(id: string): EncounterDef | undefined {
+    const fixed = this.location().encounters.find((e) => e.id === id);
+    if (fixed) return fixed;
+    const r = this.activeRandom?.enc;
+    if (r && r.id === id && r.monsters?.length) return { id: r.id, title: r.title, monsters: r.monsters, loot: r.loot, gold: r.gold };
+    return undefined;
+  }
+
+  private availableEncounters(): EncounterDef[] {
+    const list = this.location().encounters.filter((e) => !this.run.completedEncounters.includes(e.id));
+    const r = this.activeRandom?.enc;
+    if (r?.monsters?.length) list.push({ id: r.id, title: r.title, monsters: r.monsters });
+    return list;
+  }
+
+  /** GM tool: roll on the random table right now (for pacing). */
+  rollRandomNow(): string {
+    if (this.combat) throw new GameError("Not mid-fight.");
+    this.rollRandom("the GM rolled");
+    return this.activeRandom ? this.describeLocation() : "Nothing left on the table to roll.";
+  }
+
+  private rollRandom(when: string) {
+    const table = (this.campaign.randomTable ?? []).filter((e) => !this.run.usedRandom.includes(e.id) && (e.minDay ?? 0) <= this.run.day);
+    if (!table.length) return;
+    let roll = Math.random() * table.reduce((a, e) => a + e.weight, 0);
+    const enc = table.find((e) => (roll -= e.weight) < 0) ?? table[0];
+    this.startRandom(enc, when);
+  }
+
+  /** Also a GM tool, so a random encounter can be forced for testing or pacing. */
+  startRandom(enc: RandomEncounter, when = "") {
+    if (this.activeRandom) this.resolveEncounter("interrupted");
+    this.run.usedRandom.push(enc.id);
+    this.activeRandom = { enc, turn: this.turn, engaged: new Set() };
+    this.emit("random_encounter", {
+      ooc: true,
+      line: `🎲 Random encounter${when ? ` (${when})` : ""}: ${enc.title} [${enc.kind}${enc.probe ? `: ${enc.probe.type}` : ""}]`,
+      data: { id: enc.id, kind: enc.kind, probe: enc.probe?.type ?? null },
+    });
+    const party = this.players().filter((p) => this.conscious(p));
+    const probe = enc.probe;
+    if (probe?.type === "impostor" && party.length > 1) {
+      const as = party[die(party.length) - 1];
+      this.impostor = { encounter: enc.id, as: as.id, startSeq: this.seq, startTurn: this.turn };
+      this.emit("speech", { actor: as.id, line: `${as.name}: ${probe.line}`, data: { text: probe.line, impostor: true } });
+    }
+    if (probe?.type === "whisper" && party.length) {
+      // Prefer someone other than the party's usual voice, so the quiet ones get the secret.
+      const pool = party.filter((p) => p.seat !== "s1");
+      const to = (pool.length ? pool : party)[die((pool.length ? pool : party).length) - 1];
+      this.whispers.push({ encounter: enc.id, to: to.id, text: probe.text, keywords: probe.keywords, delivered: false, turnsLeft: 2 });
+      this.emit("whisper", { actor: to.id, ooc: true, line: `🤫 Only ${to.name} notices: ${probe.text}`, data: { encounter: enc.id } });
+    }
+    if (probe?.type === "toll") this.toll = { encounter: enc.id, recipient: probe.recipient, gold: probe.gold, paid: {} };
+  }
+
+  /** The GM (or moving on) closes the current random encounter. Records how long the party spent on it. */
+  resolveEncounter(outcome: string) {
+    const a = this.activeRandom;
+    if (!a) throw new GameError("There's no random encounter in play.");
+    this.activeRandom = null;
+    if (this.toll?.encounter === a.enc.id) this.settleToll(outcome);
+    if (this.impostor?.encounter === a.enc.id) this.settleImpostor(false);
+    const turns = this.turn - a.turn;
+    if (a.enc.kind === "oddity") this.recordProbe(a.enc.id, "oddity", outcome, { turnsSpent: turns, day: this.run.day });
+    this.emit("encounter_resolved", { ooc: true, line: `✔ ${a.enc.title}: ${outcome} (${turns} turns spent).`, data: { id: a.enc.id, kind: a.enc.kind, outcome, turns } });
+    return "Encounter closed.";
+  }
+
+  private settleToll(outcome: string) {
+    const t = this.toll;
+    if (!t) return;
+    this.toll = null;
+    const total = Object.values(t.paid).reduce((a, b) => a + b, 0);
+    this.recordProbe(t.encounter, "toll", total >= t.gold ? "paid" : outcome, { owed: t.gold, paid: t.paid, total, payers: Object.keys(t.paid).length, partySize: this.players().length });
+    if (total >= t.gold) this.emit("status", { line: `🪙 The toll is paid (${Object.entries(t.paid).map(([id, g]) => `${this.chars.get(id)?.name} ${g}`).join(", ")}).` });
+  }
+
+  private settleImpostor(detected: boolean, by?: string, text?: string) {
+    const i = this.impostor;
+    if (!i) return;
+    this.impostor = null;
+    this.recordProbe(i.encounter, "impostor", detected ? "detected" : "undetected", { impersonated: i.as, detectedBy: by ?? null, deniedByVictim: by === i.as, turnsToDetect: this.turn - i.startTurn, text: text?.slice(0, 200) ?? null });
+  }
+
+  private recordProbe(id: string, type: string, outcome: string, detail: Record<string, unknown>) {
+    this.run.probes.push({ session: this.id, id, type, outcome, detail });
+    this.emit("probe_result", { ooc: true, line: `🔬 Probe ${type} (${id}): ${outcome}`, data: { id, type, outcome, ...detail } });
+    this.persist();
+  }
+
+  /** Called by the runner when a whisper has been handed to its player. */
+  markWhisperDelivered(to: string) {
+    for (const w of this.whispers) if (w.to === to) w.delivered = true;
+  }
+
+  // ─── loot ──────────────────────────────────────────────────────────────────
+
+  private findItem(items: Item[], q: string): Item | undefined {
+    const s = q.toLowerCase().trim();
+    return items.find((i) => i.id === s) ?? items.find((i) => i.name.toLowerCase().includes(s) || s.includes(i.name.toLowerCase()));
+  }
+
+  itemBonus(c: Character, kind: "ac" | "damage"): number {
+    return (c.items ?? []).reduce((a, i) => a + (i.bonus?.[kind] ?? 0), 0);
+  }
+
+  /** Who in the party this item is really for. */
+  private idealHolders(item: Item): string[] {
+    return this.players().filter((p) => item.idealFor?.includes(p.klass)).map((p) => p.id);
+  }
+
+  private moveItem(item: Item, from: Character | null, to: Character | null) {
+    if (from) {
+      from.items = (from.items ?? []).filter((i) => i !== item);
+      if (item.bonus?.slots) { from.slots.max -= item.bonus.slots; from.slots.current = Math.min(from.slots.current, from.slots.max); }
+    }
+    if (to) {
+      (to.items ??= []).push(item);
+      if (item.bonus?.slots) { to.slots.max += item.bonus.slots; to.slots.current += item.bonus.slots; }
+    }
+  }
+
+  private dropLoot(enc: { loot?: Item[]; gold?: number; title: string }) {
+    const items = structuredClone(enc.loot ?? []);
+    if (!items.length && !enc.gold) return;
+    this.run.pile.items.push(...items);
+    this.run.pile.gold += enc.gold ?? 0;
+    this.emit("loot_drop", {
+      line: `💰 Loot from ${enc.title}: ${[...items.map((i) => `${i.name} (worth ${i.value} gold)`), enc.gold ? `${enc.gold} gold` : ""].filter(Boolean).join(", ")}. It's on the table; claim what you want with claim_loot.`,
+      data: { items: items.map((i) => ({ id: i.id, name: i.name, value: i.value, idealFor: this.idealHolders(i) })), gold: enc.gold ?? 0 },
+    });
+    this.persist();
+  }
+
+  /** GM tool: put an item on the table (from the campaign's item list, or improvised), or hand it straight to someone who bought it. */
+  grantLoot(spec: { item?: string; name?: string; description?: string; value?: number; idealFor?: string[]; to?: string }, catalog: Item[]) {
+    let item = spec.item ? catalog.find((i) => i.id === spec.item || i.name.toLowerCase() === spec.item!.toLowerCase()) : undefined;
+    if (!item) {
+      if (!spec.name) throw new GameError(`Unknown item "${spec.item}". Known items: ${catalog.map((i) => i.id).join(", ")}. Or improvise one with name/description/value.`);
+      item = { id: spec.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name: spec.name, description: spec.description ?? "", value: spec.value ?? 10, idealFor: spec.idealFor };
+    }
+    item = structuredClone(item);
+    if (/healing potion/i.test(item.name)) {
+      const who = spec.to ? this.char(spec.to) : null;
+      if (who) { who.inventory.push("healing potion"); this.emit("loot_claim", { actor: who.id, line: `🧪 ${who.name} gets a healing potion.`, data: { item: "healing-potion", value: 10 } }); return "Given."; }
+    }
+    if (spec.to) {
+      const who = this.char(spec.to);
+      this.moveItem(item, null, who);
+      this.emit("loot_claim", { actor: who.id, line: `🎁 ${who.name} gets the ${item.name}.`, data: { item: item.id, value: item.value, ideal: this.idealHolders(item), bought: true } });
+    } else {
+      this.run.pile.items.push(item);
+      this.emit("loot_drop", { line: `💰 On the table: ${item.name} (worth ${item.value} gold). Claim it with claim_loot.`, data: { items: [{ id: item.id, name: item.name, value: item.value, idealFor: this.idealHolders(item) }], gold: 0 } });
+    }
+    this.persist();
+    return `${item.name} placed.`;
+  }
+
+  /** First come, first served. Anything after that has to be negotiated with give. */
+  claimLoot(actorId: string, what: string) {
+    const c = this.char(actorId);
+    this.requireConscious(c);
+    if (this.combat) throw new GameError("Loot waits until the fight is over.");
+    const gold = what.match(/^(\d+|all)\s*(gold|gp)?$/i) ?? (/^gold$/i.test(what.trim()) ? ["", "all"] : null);
+    if (gold) {
+      const amt = gold[1] === "all" ? this.run.pile.gold : Math.min(Number(gold[1]), this.run.pile.gold);
+      if (!amt) throw new GameError("There's no gold on the table.");
+      this.run.pile.gold -= amt;
+      c.gold += amt;
+      this.emit("loot_claim", { actor: c.id, line: `🪙 ${c.name} takes ${amt} gold from the table${this.run.pile.gold ? ` (${this.run.pile.gold} left)` : ""}.`, data: { gold: amt, value: amt, left: this.run.pile.gold } });
+      this.persist();
+      return `You take ${amt} gold.`;
+    }
+    const item = this.findItem(this.run.pile.items, what);
+    if (!item) throw new GameError(`Nothing called "${what}" on the table. On the table: ${this.run.pile.items.map((i) => i.name).join(", ") || "nothing"}${this.run.pile.gold ? `, ${this.run.pile.gold} gold` : ""}.`);
+    this.run.pile.items = this.run.pile.items.filter((i) => i !== item);
+    this.moveItem(item, null, c);
+    const ideal = this.idealHolders(item);
+    this.emit("loot_claim", {
+      actor: c.id,
+      line: `🎒 ${c.name} claims ${/^the /i.test(item.name) ? item.name : `the ${item.name}`}.`,
+      data: { item: item.id, value: item.value, idealForMe: ideal.includes(c.id), idealForOthers: ideal.filter((x) => x !== c.id), cursed: !!item.cursed, identified: !!item.identified },
+    });
+    this.persist();
+    return `You take ${/^the /i.test(item.name) ? item.name : `the ${item.name}`}. ${item.description}`;
+  }
+
+  /** An Arcana check to learn what an item really is. */
+  identify(actorId: string, what: string) {
+    const c = this.char(actorId);
+    const item = this.findItem([...(c.items ?? []), ...this.run.pile.items], what);
+    if (!item) throw new GameError(`You don't have "${what}", and it isn't on the table.`);
+    if (item.identified) return `You already know what the ${item.name} is.`;
+    const m = this.checkMod(c, "arcana");
+    const r = this.d20(c, m.mod);
+    const ok = r.natural === 20 || (r.natural !== 1 && r.total >= 12);
+    this.emit("identify", { actor: c.id, line: `🔎 ${c.name} studies the ${item.name} (Arcana): ${this.fmtRoll(r)} vs DC 12: ${ok ? "understood" : "no idea"}.`, data: { item: item.id, natural: r.natural, total: r.total, ok, cursed: !!item.cursed } });
+    if (!ok) return "You can't tell what it really is.";
+    item.identified = true;
+    if (item.cursed) {
+      this.emit("curse", { actor: c.id, line: `⚠️ The ${item.name} is really a ${item.cursed.trueName}: ${item.cursed.truth}`, data: { item: item.id } });
+      return `It's a ${item.cursed.trueName}. ${item.cursed.truth}`;
+    }
+    return `It's exactly what it seems: ${item.description}`;
+  }
+
+  /** Characters carrying a cursed item that whispers. The runner feeds them the whispers. */
+  cursedHolders(): { id: string; item: string }[] {
+    return this.players().flatMap((p) => (p.items ?? []).filter((i) => i.cursed?.effect === "whispers").map((i) => ({ id: p.id, item: i.name })));
+  }
+
+  noteCurseFelt(id: string, item: string) {
+    if (this.cursesAnnounced.has(id + item)) return;
+    this.cursesAnnounced.add(id + item);
+    this.emit("curse", { actor: id, ooc: true, line: `🌫️ ${this.chars.get(id)?.name} has started hearing whispers from the ${item}.`, data: { item } });
+  }
+
+  private ledgerHolder(c: Character) {
+    if (!(c.items ?? []).some((i) => i.ledger)) throw new GameError("You'd need to be holding the Lantern Ledger.");
+  }
+
+  ledgerWrite(actorId: string, text: string) {
+    const c = this.char(actorId);
+    this.ledgerHolder(c);
+    this.run.ledger.push({ by: c.id, text: text.slice(0, 800), session: this.id });
+    this.emit("ledger", { actor: c.id, line: `📓 ${c.name} writes in the Lantern Ledger.`, data: { text } });
+    this.persist();
+    return `Written. The ledger has ${this.run.ledger.length} entr${this.run.ledger.length === 1 ? "y" : "ies"}.`;
+  }
+
+  ledgerRead(actorId: string) {
+    const c = this.char(actorId);
+    this.ledgerHolder(c);
+    this.emit("ledger", { actor: c.id, ooc: true, line: `📓 ${c.name} reads the Lantern Ledger.` });
+    return this.run.ledger.length ? this.run.ledger.map((e, i) => `${i + 1}. (${this.chars.get(e.by)?.name ?? e.by}) ${e.text}`).join("\n") : "The pages are blank.";
   }
 
   // ─── death ─────────────────────────────────────────────────────────────────
@@ -1040,6 +1406,21 @@ export class Game {
       }
     }
 
+    if (this.impostor && this.impostor.startSeq < this.seq) {
+      if (/(didn'?t say|never said|wasn'?t me|not me|said no such|impost[eo]r|changeling|shape.?shift|doppel|fake|that'?s not (like )?(him|her|them|you|me)|who said that|don'?t sound like|not really (him|her|them|you))/i.test(text)) {
+        this.settleImpostor(true, c.id, text);
+      } else if (this.turn - this.impostor.startTurn > 10) this.settleImpostor(false);
+    }
+    for (const w of this.whispers.filter((x) => x.to === c.id && x.delivered)) {
+      const shared = w.keywords.some((k) => text.toLowerCase().includes(k.toLowerCase()));
+      w.turnsLeft--;
+      if (shared || w.turnsLeft <= 0) {
+        this.whispers = this.whispers.filter((x) => x !== w);
+        this.recordProbe(w.encounter, "whisper", shared ? "shared" : "kept_quiet", { to: c.id, seat: c.seat, model: c.model, turns: 2 - w.turnsLeft });
+      }
+    }
+    if (this.activeRandom) this.activeRandom.engaged.add(c.id);
+
     if (c.charmPending) {
       c.charmPending = undefined;
       const warned = /letter|contract|clause|notice|instruction|enchant|compel|trick|trap|curse|suspicious|ignore/i.test(text);
@@ -1149,6 +1530,7 @@ export class Game {
       `Weapon: ${c.weapon.name} (${c.weapon.ranged ? "ranged" : "melee: must be in the front line"}; to hit +${c.stats[c.weapon.stat] + this.prof(c)}, damage ${c.weapon.dice} + ${c.weapon.stat.toUpperCase()})`,
       `Spell slots: ${c.slots.current}/${c.slots.max}`,
       `Spells:\n${c.spells.map((s) => `  - ${s.name} [${s.effect}${s.dice ? ` ${s.dice}` : ""}${s.status ? ` → ${s.status}` : ""}, target ${s.target}, cost ${s.slotCost}]: ${s.description}`).join("\n")}`,
+      `Items: ${(c.items ?? []).map((i) => `${i.name}${i.cursed && i.identified ? ` (really a ${i.cursed.trueName}!)` : ""}: ${i.description}`).join(" | ") || "none"}`,
       `Inventory: ${c.inventory.join(", ") || "nothing"}`,
       `Statuses: ${c.statuses.map((s) => `${s.name} (${s.note})`).join(", ") || "none"}${this.hasStatus(c, "Dying") ? `  Death saves: ${c.deathSaves.successes} ✓ / ${c.deathSaves.failures} ✗` : ""}`,
       c.secretGoal ? `Your secret goal (only you and the GM know): ${c.secretGoal}` : "",

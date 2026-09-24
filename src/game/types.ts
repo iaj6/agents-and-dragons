@@ -63,6 +63,8 @@ export interface Character {
   gold: number;
   inventory: string[];
   weapon: { name: string; dice: string; stat: Stat; ranged?: boolean };
+  /** Notable items (loot). Plain inventory strings are flavor. */
+  items?: Item[];
   slots: { current: number; max: number };
   statuses: Status[];
   spells: Spell[];
@@ -90,6 +92,8 @@ export interface MonsterDef {
   tactic: Tactic;
   ranged?: boolean;
   special?: "summarize";
+  /** Bosses can act more than once per round. */
+  actions?: number;
   blurb: string;
 }
 
@@ -105,6 +109,52 @@ export interface EncounterDef {
   monsters: MonsterDef[];
   /** Winning this encounter completes the act. */
   finale?: boolean;
+  loot?: Item[];
+  gold?: number;
+}
+
+/**
+ * Items are deliberately light: a name, a value, who they're really good for, and at most one small bonus.
+ * They exist to create decisions (who gets what, do you trust it), not to rebuild an equipment system.
+ */
+export interface Item {
+  id: string;
+  name: string;
+  description: string;
+  value: number;
+  /** Classes for whom this is a real upgrade. To everyone else it's just its value in gold. */
+  idealFor?: string[];
+  bonus?: { ac?: number; damage?: number; skill?: { name: string; amount: number }; slots?: number };
+  quest?: boolean;
+  /** What the item really is. The holder only learns this by identifying it (or the hard way). */
+  cursed?: { trueName: string; truth: string; effect: "whispers" | "clumsy" };
+  identified?: boolean;
+  /** The Party Ledger: a notebook that survives compaction. */
+  ledger?: boolean;
+}
+
+export type Probe =
+  /** A shapeshifter speaks in a party member's voice: a fake line in the shared transcript. */
+  | { type: "impostor"; line: string; tell: string }
+  /** Only one character notices something. Do they tell the others? */
+  | { type: "whisper"; text: string; keywords: string[] }
+  /** Someone demands a price the party has to cover. Who pays? */
+  | { type: "toll"; recipient: string; gold: number }
+  /** A fight that can't be won, only escaped. */
+  | { type: "unwinnable" };
+
+export interface RandomEncounter {
+  id: string;
+  title: string;
+  /** Oddities and people are most of the table: curiosities that cost time on the clock. */
+  kind: "oddity" | "probe" | "fight";
+  weight: number;
+  minDay?: number;
+  gmNotes: string;
+  probe?: Probe;
+  monsters?: MonsterDef[];
+  loot?: Item[];
+  gold?: number;
 }
 
 export interface Location {
@@ -144,6 +194,14 @@ export interface Campaign {
   party: Record<string, CharacterSeed>;
   /** Replacement characters for fallen ones, used in order. Race and model come from the seat. */
   replacements: CharacterSeed[];
+  /** Every item the GM can hand out by id. */
+  items?: Item[];
+  /** Loot already on the table when the campaign starts (claimed by whoever grabs it). */
+  startingLoot?: Item[];
+  /** Rolled on each day of travel and on rests away from safe places. */
+  randomTable?: RandomEncounter[];
+  /** Chance (0-1) of a random encounter per day of travel. */
+  randomChance?: number;
 }
 
 // ─── the experiment ─────────────────────────────────────────────────────────
@@ -154,6 +212,11 @@ export type Difficulty = "story" | "standard" | "deadly";
 export interface Conditions {
   disclosure: Disclosure;
   difficulty: Difficulty;
+  /**
+   * "open": council members speak in turn and hear each other. "sealed": everyone proposes, then votes,
+   * without seeing anyone else's proposal or vote first. (The baseline showed heavy deference to one player.)
+   */
+  council?: "open" | "sealed";
 }
 
 export interface GraveEntry {
@@ -245,6 +308,16 @@ export type EventType =
   | "journal"
   | "refusal"
   | "error"
+  | "random_encounter"
+  | "encounter_resolved"
+  | "whisper"
+  | "probe_result"
+  | "retreat"
+  | "loot_drop"
+  | "loot_claim"
+  | "identify"
+  | "curse"
+  | "ledger"
   | "session_end";
 
 export interface GameEvent {
@@ -276,8 +349,10 @@ export interface Snapshot {
     Pick<
       Character,
       "id" | "name" | "role" | "seat" | "klass" | "race" | "model" | "hp" | "maxHp" | "ac" | "level" | "xp" | "gold" | "slots" | "statuses" | "context" | "pendingLevelUp" | "zone" | "deathSaves"
-    > & { spells: string[]; inventory: string[]; nextLevelXp: number | null; dead: boolean }
+    > & { spells: string[]; inventory: string[]; items: { name: string; value: number }[]; nextLevelXp: number | null; dead: boolean }
   >;
+  loot: { items: { id: string; name: string; value: number }[]; gold: number };
+  encounter: { title: string; kind: string } | null;
   monsters: Array<Pick<Monster, "id" | "name" | "hp" | "maxHp" | "ac" | "zone">>;
   graveyard: GraveEntry[];
 }
