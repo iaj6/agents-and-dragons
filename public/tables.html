@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tables · Agents &amp; Dragons</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root { --night: #14100c; --night-2: #1d1712; --night-3: #2a2119; --line: #3b2f24; --text: #eadcc2; --muted: #a18d74; --dim: #7c6d5a; --candle: #e8a33d; --parchment: #efe3c6;
+      --m-opus: #3987e5; --m-sonnet: #d95926; --m-haiku: #199e70; --m-other: #c98500; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--night); color: var(--text); font: 17px/1.5 "EB Garamond", Georgia, serif; }
+    header { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: #17120d; }
+    h1 { font: 700 20px "Cinzel", serif; color: var(--candle); margin: 0; }
+    main { max-width: 1240px; margin: 0 auto; padding: 18px 16px 60px; }
+    .intro { color: var(--muted); margin: 0 0 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
+    .hall { background: var(--night-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+    .hall.off, .hall.idle { opacity: 0.55; align-self: start; }
+    .hall.fight { border-color: #7a2a24; box-shadow: 0 0 18px -8px #c0392b; }
+    .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .port { font: 12px "JetBrains Mono", monospace; color: var(--dim); }
+    .state { font: 600 11px "JetBrains Mono", monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+    .state.live { color: #e25b4b; } .state.done { color: var(--muted); } .state.idle { color: var(--dim); }
+    .label { font: 700 16px "Cinzel", serif; color: var(--parchment); letter-spacing: 0.02em; }
+    .chips { display: flex; gap: 5px; flex-wrap: wrap; }
+    .chip { font: 11px "JetBrains Mono", monospace; padding: 1px 6px; border-radius: 4px; background: var(--night-3); border: 1px solid var(--line); color: var(--muted); }
+    .chip.hot { color: var(--candle); border-color: #5a4020; }
+    .where { font-size: 16px; }
+    .where small { color: var(--muted); }
+    .party { display: grid; gap: 5px; }
+    .pc { display: grid; grid-template-columns: 1fr 70px 70px; gap: 8px; align-items: center; font-size: 15px; }
+    .pc .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pc .nm i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .pc .nm small { color: var(--dim); font: 11px "JetBrains Mono", monospace; margin-left: 4px; }
+    .bar { height: 6px; background: #0e0b08; border-radius: 3px; overflow: hidden; }
+    .bar b { display: block; height: 100%; border-radius: 3px; }
+    .hp b { background: linear-gradient(90deg, #7d1d20, #c0392b); } .ctx b { background: linear-gradient(90deg, #7a4f14, var(--candle)); }
+    .pc.dead { opacity: 0.4; text-decoration: line-through; }
+    .legend { font: 11px "JetBrains Mono", monospace; color: var(--dim); display: grid; grid-template-columns: 1fr 70px 70px; gap: 8px; }
+    .actions { display: flex; gap: 10px; margin-top: 4px; }
+    .actions a { font: 600 14px "EB Garamond", serif; text-decoration: none; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); color: var(--text); }
+    .actions a.primary { background: var(--candle); color: #1a1208; border-color: var(--candle); }
+    .off .actions { display: none; }
+    .empty { color: var(--muted); font-style: italic; }
+  </style>
+</head>
+<body>
+  <header><h1>Tables</h1><nav id="sitenav"></nav></header>
+  <main>
+    <p class="intro">Every Guild Hall on this machine. :4777 is the main table; :4781–:4784 are experiment halls that run paired sessions in parallel. Refreshes every few seconds.</p>
+    <div class="grid" id="grid"></div>
+  </main>
+  <script src="nav.js"></script>
+  <script>
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    const colorOf = (m = "") => (m.includes("opus") ? "var(--m-opus)" : m.includes("sonnet") ? "var(--m-sonnet)" : m.includes("haiku") ? "var(--m-haiku)" : "var(--m-other)");
+    const short = (m = "") => m.split("/").pop().replace(/^claude-/, "");
+    function card(h) {
+      if (!h.live) return `<div class="hall off"><div class="top"><span class="port">:${h.port}</span><span class="state idle">not running</span></div></div>`;
+      const s = h.snap;
+      if (!s) return `<div class="hall idle"><div class="top"><span class="port">:${h.port}</span><span class="state idle">waiting for a session</span></div></div>`;
+      const label = (s.runId ?? "").replace(/^unwritten-coast-|^last-lantern-/, "").replace(/-\d{4}-\d{2}-\d{2}T.*$/, "");
+      const players = (s.party ?? []).filter((p) => p.role === "player");
+      const gm = (s.party ?? []).find((p) => p.role === "dm");
+      return `<div class="hall ${s.combat ? "fight" : ""}">
+        <div class="top"><span class="port">:${h.port}</span><span class="state ${s.ended ? "done" : "live"}">${s.ended ? "finished" : "● playing"}</span></div>
+        <div class="label">${esc(label || s.title)}</div>
+        <div class="chips">${s.conditions ? `<span class="chip">${esc(s.conditions.disclosure)}</span><span class="chip">${esc(s.conditions.difficulty)}</span>${s.conditions.council ? `<span class="chip">${esc(s.conditions.council)} councils</span>` : ""}` : ""}${gm ? `<span class="chip">GM ${esc(short(gm.model))}</span>` : ""}${s.combat ? `<span class="chip hot">⚔️ round ${s.combat.round}</span>` : ""}${s.council ? `<span class="chip hot">🗳️ council</span>` : ""}${s.encounter ? `<span class="chip hot">🎲 ${esc(s.encounter.title)}</span>` : ""}</div>
+        <div class="where">${esc(s.scene?.title ?? "")} <small>· day ${s.day ?? "?"} · turn ${s.turn}${(s.graveyard ?? []).length ? ` · ☠ ${s.graveyard.length}` : ""}</small></div>
+        <div class="party"><div class="legend"><span></span><span>HP</span><span>context</span></div>${players.map((p) => `<div class="pc ${p.dead ? "dead" : ""}"><span class="nm"><i style="background:${colorOf(p.model)}"></i>${esc(p.name)}<small>${esc(short(p.model))}</small></span><span class="bar hp"><b style="width:${p.dead ? 0 : Math.round((p.hp / p.maxHp) * 100)}%"></b></span><span class="bar ctx"><b style="width:${Math.min(100, Math.round((p.context.tokens / p.context.budget) * 100))}%"></b></span></div>`).join("")}</div>
+        <div class="actions"><a class="primary" href="http://localhost:${h.port}/table.html">Watch</a></div>
+      </div>`;
+    }
+    async function refresh() {
+      const halls = await (await fetch("/api/halls")).json().catch(() => []);
+      document.getElementById("grid").innerHTML = halls.length ? halls.map(card).join("") : `<p class="empty">No Guild Halls found.</p>`;
+    }
+    refresh();
+    setInterval(refresh, 4000);
+  </script>
+</body>
+</html>

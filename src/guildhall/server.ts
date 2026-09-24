@@ -195,6 +195,27 @@ app.get("/events", (req, res) => {
   });
 });
 
+/**
+ * Every Guild Hall on this machine (the live table plus sweep halls), summarised for the hub page.
+ * Other halls are asked server-to-server, so they don't need CORS or even the same code version.
+ */
+const HALL_PORTS = (process.env.HALL_PORTS ?? "4777,4781,4782,4783,4784").split(",").map(Number);
+type HallSummary = { port: number; live: boolean; snap?: unknown };
+app.get("/api/halls", async (_req, res) => {
+  const halls: HallSummary[] = await Promise.all(
+    HALL_PORTS.map(async (port): Promise<HallSummary> => {
+      if (port === PORT) return { port, live: true, snap: game?.snapshot() ?? null };
+      try {
+        const r = await fetch(`http://localhost:${port}/api/state`, { signal: AbortSignal.timeout(800) });
+        return { port, live: true, snap: r.ok ? await r.json() : null };
+      } catch {
+        return { port, live: false };
+      }
+    }),
+  );
+  res.json(halls);
+});
+
 app.get("/api/prices", async (_req, res) => res.json(await loadPrices()));
 
 app.get("/api/state", (_req, res) => void (game ? res.json(game.snapshot()) : res.status(404).end()));
@@ -213,7 +234,7 @@ app.get("/api/sessions/:id", (req, res) => {
 
 /** Public view of campaign runs: no secret goals, no journals. */
 app.get("/api/runs", (_req, res) =>
-  res.json(store.list().map((r) => ({ runId: r.runId, campaignId: r.campaignId, conditions: r.conditions, sessions: r.sessions, day: r.day, outcome: r.outcome, graveyard: r.graveyard }))),
+  res.json(store.list().map((r) => ({ runId: r.runId, campaignId: r.campaignId, conditions: r.conditions, seatModels: r.seatModels, sessions: r.sessions, day: r.day, outcome: r.outcome, graveyard: r.graveyard }))),
 );
 
 // ── The Lab: analysis across runs (read-only) ─────────────────────────────────

@@ -41,7 +41,7 @@ code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; }
 .brand h1 { font-family: "Cinzel", serif; font-size: 22px; letter-spacing: 0.06em; margin: 0; color: var(--candle); }
 .brand h1 span { color: var(--muted); font-weight: 500; }
 .sub { font-size: 14px; color: var(--muted); font-style: italic; }
-.scene-title { flex: 1; text-align: center; font-family: "Cinzel", serif; font-size: 15px; letter-spacing: 0.08em; color: var(--parchment-2); min-width: 160px; }
+.scene-title { flex: 1 1 200px; text-align: center; font-family: "Cinzel", serif; font-size: 15px; letter-spacing: 0.08em; color: var(--parchment-2); min-width: 160px; }
 .controls { display: flex; gap: 10px; align-items: center; }
 .controls select {
   background: var(--night-3); color: var(--text); border: 1px solid var(--line); border-radius: 6px;

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Watch · Agents &amp; Dragons</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <h1>Agents <span>&amp;</span> Dragons</h1>
+      <div class="sub" id="sub">Waiting for the table to sit down…</div>
+    </div>
+    <div class="scene-title" id="scene"></div>
+    <nav id="sitenav"></nav>
+    <div class="controls">
+      <span class="live" id="live">● LIVE</span>
+      <select id="sessions" aria-label="Replay a past session"><option value="">Live table</option></select>
+      <select id="speed" aria-label="Replay speed" hidden>
+        <option value="1400">0.5×</option><option value="700" selected>1×</option><option value="250">3×</option><option value="40">Skip</option>
+      </select>
+    </div>
+  </header>
+
+  <main class="table">
+    <aside class="party" id="party" aria-label="The party"></aside>
+
+    <section class="chronicle-wrap" aria-label="The chronicle">
+      <div class="chronicle" id="chronicle">
+        <div class="empty">
+          <p>No one is playing yet.</p>
+          <p class="hint">Start the Guild Hall with <code>npm run guildhall</code>, then <code>npm run play</code> (or <code>npm run mock</code> for a free dry run).</p>
+        </div>
+      </div>
+      <button class="jump" id="jump" hidden>↓ Back to the action</button>
+    </section>
+
+    <aside class="side">
+      <div class="panel">
+        <h2 id="battle-title">Enemies</h2>
+        <div id="initiative" class="initiative" hidden></div>
+        <div id="monsters" class="monsters"><div class="muted">None in sight.</div></div>
+      </div>
+      <div class="panel" id="loot-panel" hidden>
+        <h2>On the table</h2>
+        <div id="loot" class="loot"></div>
+      </div>
+      <div class="panel" id="graveyard-panel" hidden>
+        <h2>The Graveyard</h2>
+        <div id="graveyard" class="graveyard"></div>
+      </div>
+      <div class="panel">
+        <h2>The tab</h2>
+        <div id="tab" class="tab"></div>
+      </div>
+      <div class="panel ooc-panel">
+        <h2>Out of character</h2>
+        <div class="filters" id="filters">
+          <button data-f="all" class="on">All</button><button data-f="thought">Thoughts</button><button data-f="tool">Tools</button><button data-f="usage">Tokens</button>
+        </div>
+        <div id="ooc" class="ooc" data-filter="all"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="nav.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

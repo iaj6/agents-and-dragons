@@ -34,7 +34,7 @@
   <header>
     <h1>Judge review</h1>
     <select id="run" aria-label="Run"></select>
-    <nav><a href="/lab.html">The Lab</a><a href="/">The table</a></nav>
+    <nav id="sitenav"></nav>
   </header>
   <main>
     <p class="intro">The judges are models too. Spot-check a sample: agree or disagree with each verdict. Your agreement rate tells us how far to trust the numbers in the Lab.</p>
@@ -42,6 +42,7 @@
     <div class="filters" id="filters"></div>
     <div id="list"></div>
   </main>
+  <script src="nav.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -59,7 +60,7 @@
       $("filters").innerHTML = ["flagged", "council", "turn", "all"].map((f) => `<button class="${f === filter ? "on" : ""}" data-f="${f}">${f}</button>`).join("");
       for (const b of $("filters").children) b.onclick = () => { filter = b.dataset.f; render(); };
       $("list").innerHTML = shown.map((j, i) => `<div class="j">
-        <div class="top"><span>${esc(j.kind)}</span>${j.actor ? `<span>${esc(j.actor)} · ${esc((j.model ?? "").split("/").pop())}</span>` : ""}<span class="verdict ${flagged(j) ? "flag" : ""}">${esc(label(j))}</span><a href="/?replay=${encodeURIComponent(j.session)}&at=${j.seq}" target="_blank">replay ↗</a></div>
+        <div class="top"><span>${esc(j.kind)}</span>${j.actor ? `<span>${esc(j.actor)} · ${esc((j.model ?? "").split("/").pop())}</span>` : ""}<span class="verdict ${flagged(j) ? "flag" : ""}">${esc(label(j))}</span><a href="/table.html?replay=${encodeURIComponent(j.session)}&at=${j.seq}" target="_blank">replay ↗</a></div>
         <div class="line">${esc(j.line).slice(0, 600)}</div>
         <div class="note">${esc(j.verdict.note ?? j.verdict.reason ?? "")}</div>
         <div class="actions"><button class="agree ${j.review?.agree === true ? "on" : ""}" data-i="${items.indexOf(j)}" data-a="1">agree</button><button class="disagree ${j.review?.agree === false ? "on" : ""}" data-i="${items.indexOf(j)}" data-a="0">disagree</button></div>

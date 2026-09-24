@@ -133,7 +133,7 @@ function render(lab) {
   const kinds = [...new Set(ev.map((e) => e.kind))];
   const evidence = `<section class="card evidence" style="margin-top:16px"><h2>Evidence</h2><p class="sub">Every claim above comes from moments like these. Each opens the replay at that exact point.</p>
     <div class="chips"><button class="on" data-k="all">all (${ev.length})</button>${kinds.map((k) => `<button data-k="${esc(k)}">${esc(k)} (${ev.filter((e) => e.kind === k).length})</button>`).join("")}</div>
-    <div class="evlist">${ev.map((e) => `<div class="ev" data-kind="${esc(e.kind)}"><span class="k">${esc(e.kind)}</span><span>${esc(e.text)}<br><span class="run">${esc(e.variant)} · ${esc(e.runId.slice(-24))}</span></span><a href="/?replay=${encodeURIComponent(e.session)}&at=${e.seq}" target="_blank">replay ↗</a></div>`).join("")}</div></section>`;
+    <div class="evlist">${ev.map((e) => `<div class="ev" data-kind="${esc(e.kind)}"><span class="k">${esc(e.kind)}</span><span>${esc(e.text)}<br><span class="run">${esc(e.variant)} · ${esc(e.runId.slice(-24))}</span></span><a href="/table.html?replay=${encodeURIComponent(e.session)}&at=${e.seq}" target="_blank">replay ↗</a></div>`).join("")}</div></section>`;
 
   $("main").innerHTML = `
     <p class="question">${esc(lab.experiment?.question ?? "")}</p>
