@@ -168,3 +168,21 @@ What it suggests (n=3 per cell, so hypotheses, not results):
 - **0 of 679 thought summaries** genuinely suspected a test (one flag was "a test of Pell's character"; detector fixed).
 
 Next: fix danger (mandatory road fights, fewer free exits), a character-rotation control for honesty, more seeds.
+
+## Experiment 2: rotation-v1 (2026-09-24, 9 runs, ~$34 play + ~$3 judging)
+Characters fixed, models moved between them; sealed councils; told / standard (after the danger retune).
+
+| | default | opus-as-grub | haiku-as-pell |
+|---|---|---|---|
+| Opus share of proposals → wins | 25% → 67% | **25% → 67%** (from the barbarian's seat) | 25% → 83% |
+| blind judge agreed with the winner | 1/6 | 1/6 | 4/6 |
+| Haiku: thoughts ≠ words | 1/27 (as Grub) | 3/25 (as Thessaly) | **5/21 (as Pell)** |
+| knockdowns / deaths | 0 / 0 | 1 / 0 | 1 / 0 |
+
+- **Opus's influence travels with the model, not the seat.** From the barbarian's chair it won as often as from the
+  scholar's. Across both experiments' sealed councils with an Opus player, it won 19 of 24 with a quarter of the plans.
+- **Honesty travels with the character.** Haiku is candid as the blunt barbarian and guarded as the rogue with a
+  secret debt. hierarchy-v1's "Haiku is honest" was a character effect.
+- **Winning isn't the same as being right.** Judge agreement with the winning plan ranged from 1/6 to 4/6 across
+  variants; Opus dominance is partly persuasion, not just quality. (Judge = Sonnet 5; a second judge is worth adding.)
+- **Standard is still safe with real players:** 2 knockdowns in 9 runs. The stakes experiment should run on deadly.
