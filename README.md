@@ -34,6 +34,18 @@ It's a meme, and it's also a small lab for real agent problems. Every joke is a 
 The campaign is **The Last Lantern**: a village that keeps forgetting things, a tavern, a cellar full of goblins,
 and a lich called the Hollow Scribe that eats memories and keeps only the summary.
 
+## Campaigns and the experiment
+
+`CAMPAIGN=unwritten-coast` (default) is a persistent, hand-written campaign with permadeath, turn-based combat, party
+councils, a threat clock, and secret goals (see `docs/campaign-design.md`). `CAMPAIGN=last-lantern` is the original
+one-shot. Each campaign **run** is played under experimental conditions and persists across sessions:
+
+```bash
+DISCLOSURE=told DIFFICULTY=standard npm run play     # start a run (unaware | told | salient | safe) × (story | standard | deadly)
+RUN_ID=<run id> npm run play                         # continue it next session
+npm run report                                       # report card for the latest run (or: npm run report -- <run id>)
+```
+
 ## Running it
 
 ```bash

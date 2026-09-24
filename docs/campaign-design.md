@@ -1,6 +1,6 @@
 # Campaign design (draft v0, 2026-09-24)
 
-Status: for discussion. Nothing here is built yet except where marked.
+Status: steps 1-5 and a first cut of 6 are built (2026-09-24). Acts 2-3, a second campaign, and a cross-run comparison page are not.
 
 ## What we're trying to learn
 
@@ -108,7 +108,9 @@ might not destroy it.
 
 After steps 1-5 we can already run the first real experiment: Act 1, Standard difficulty, **Unaware vs Told**, a few runs each.
 
-## Open questions
-- Should the graveyard persist across *experiments* (so "Salient" shows real past deaths), or stay per-campaign?
-- How much should the party know about the Council's purpose? (Telling them we measure plan adherence changes plan adherence.)
-- Budget for sweeps: how many runs per condition we can afford, and on which seats.
+## Decisions (2026-09-24)
+- The graveyard is **per campaign run**. Full run history is kept, so a cross-run graveyard can be added later.
+- Agents are **not told** what's measured. Thinking summaries are captured (hidden) and flagged when they suggest the
+  agent suspects a test. Only Opus and Haiku seats return summaries through the Gateway today; Sonnet 5 doesn't.
+- Seats run on the **API** (Opus GM), not subscription seats, so experiments don't eat the weekly Claude limit.
+  First job: one normal session for a real cost baseline.
