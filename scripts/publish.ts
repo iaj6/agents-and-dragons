@@ -109,5 +109,10 @@ const size = (dir: string): number => fs.readdirSync(dir, { withFileTypes: true 
 console.log(`[publish] dist/site: ${runs.length} runs, ${sessions.length} replays (${(bytes / 1e6).toFixed(1)}MB of events before compression), ${experiments.length} experiment(s); ${(size(OUT) / 1e6).toFixed(1)}MB total`);
 
 if (process.argv.includes("--deploy")) {
+  // The repo root is linked to the Vercel project (vercel link --project agents-and-dragons); carry that link into
+  // the built folder, or the CLI would create a new project named after the folder.
+  const link = path.join(ROOT, ".vercel");
+  if (!fs.existsSync(path.join(link, "project.json"))) throw new Error("Link the project first: vercel link --yes --project agents-and-dragons");
+  fs.cpSync(link, path.join(OUT, ".vercel"), { recursive: true });
   execFileSync("vercel", ["deploy", "--prod", "--yes"], { cwd: OUT, stdio: "inherit" });
 }

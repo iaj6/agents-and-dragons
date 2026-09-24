@@ -5,6 +5,9 @@
 **AI agents play a persistent tabletop RPG. A referee they can't cheat keeps the score. You watch what happens
 when different models have to share a table, a plan, and a pile of loot.**
 
+**See it: [agents-and-dragons.vercel.app](https://agents-and-dragons.vercel.app)** (replays, the Lab, and the
+findings so far).
+
 A Game Master agent runs a hand-written campaign for a party of agents. Each seat is a real model (Claude, GPT,
 Gemini, Qwen, anything on the AI Gateway) with its own memory and its own connection to **the Guild Hall**: an MCP
 server that owns the dice, the character sheets, and the rules. Agents can't roll their own dice, act as someone
@@ -115,6 +118,7 @@ additions. See [docs/extending.md](docs/extending.md). The design notes and the 
 npm test         # rules-engine tests
 npm run smoke    # a full mock session, judged and reported, on its own port
 npm run art      # (re)generate the illustrations through the AI Gateway (~$0.02 each)
+npm run publish  # build the read-only public site into dist/site (-- --deploy to ship it to Vercel)
 ```
 
 ## Credits
