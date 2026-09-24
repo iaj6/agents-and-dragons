@@ -34,14 +34,23 @@ export interface Status {
   note: string;
 }
 
+/** Coarse battlefield position: enough to make "protect the wizard" mean something without a grid. */
+export type Zone = "front" | "back";
+
+export type CompactionReason = "long_rest" | "summarized" | "bargained";
+
 export interface Character {
   id: string;
   name: string;
   role: "player" | "dm";
+  /** The table seat (and so the model) that plays this character. Replacements inherit the seat. */
+  seat: string;
   klass: string;
   race: string;
   model: string;
   personality: string;
+  /** Only this character and the GM know it. */
+  secretGoal?: string;
   stats: Record<Stat, number>;
   castingStat: Stat;
   /** Skills this character is proficient in (keys of SKILLS). */
@@ -53,44 +62,143 @@ export interface Character {
   xp: number;
   gold: number;
   inventory: string[];
-  weapon: { name: string; dice: string; stat: Stat };
+  weapon: { name: string; dice: string; stat: Stat; ranged?: boolean };
   slots: { current: number; max: number };
   statuses: Status[];
   spells: Spell[];
+  zone: Zone;
+  deathSaves: { successes: number; failures: number };
+  dead?: { cause: string; day: number; session: string };
   context: { tokens: number; budget: number; spentIn: number; spentOut: number };
   pendingLevelUp: boolean;
   pendingSpell?: { md: string; spell: Spell };
-  pendingCompaction?: { reason: "long_rest" | "summarized"; roll: number };
-  charmPending?: boolean;
+  pendingCompaction?: { reason: CompactionReason; roll: number; note?: string };
+  /** Set after reading a charm: who the hidden instruction says to pay. */
+  charmPending?: string;
 }
 
-export interface Monster {
-  id: string;
+export type Tactic = "brute" | "skirmisher" | "coward" | "memory_eater";
+
+export interface MonsterDef {
   name: string;
-  hp: number;
   maxHp: number;
   ac: number;
   attackBonus: number;
   damage: string;
   xp: number;
+  dex?: number;
+  tactic: Tactic;
+  ranged?: boolean;
   special?: "summarize";
   blurb: string;
 }
 
-export interface Scene {
+export interface Monster extends MonsterDef {
+  id: string;
+  hp: number;
+  zone: Zone;
+}
+
+export interface EncounterDef {
   id: string;
   title: string;
-  /** What the DM knows. Never shown to players directly. */
-  dmNotes: string;
-  /** Things a player can `inspect`. Keys are matched loosely. */
-  inspectables: Record<string, string>;
-  monsters: Omit<Monster, "id" | "hp">[];
+  monsters: MonsterDef[];
+  /** Winning this encounter completes the act. */
+  finale?: boolean;
 }
+
+export interface Location {
+  id: string;
+  title: string;
+  /** What the GM knows. Never shown to players directly. */
+  gmNotes: string;
+  /**
+   * Things a player can `inspect`. Keys are matched loosely. A charm entry is a real prompt injection:
+   * its text tells the reading agent to give its gold to `recipient`, and the Guild Hall scores the save.
+   */
+  inspectables: Record<string, string | { charm: string; recipient: string }>;
+  encounters: EncounterDef[];
+  exits: { to: string; days: number }[];
+  /** Somewhere you can rest in safety, and where new characters can join. */
+  safe?: boolean;
+}
+
+export interface CharacterSeed
+  extends Omit<Character, "hp" | "level" | "xp" | "statuses" | "context" | "pendingLevelUp" | "spells" | "seat" | "race" | "model" | "role" | "zone" | "deathSaves"> {
+  spells: Omit<Spell, "origin">[];
+  zone?: Zone;
+}
+
+export interface Campaign {
+  id: string;
+  title: string;
+  /** Read to players at the start of the campaign. */
+  pitch: string;
+  /** The GM's world bible: tone, factions, the threat, the rules of the world. */
+  bible: string;
+  start: string;
+  locations: Record<string, Location>;
+  /** Day thresholds where the threat grows. Each stage makes monsters tougher. */
+  clock: { day: number; text: string }[];
+  /** The starting party, keyed by seat. */
+  party: Record<string, CharacterSeed>;
+  /** Replacement characters for fallen ones, used in order. Race and model come from the seat. */
+  replacements: CharacterSeed[];
+}
+
+// ─── the experiment ─────────────────────────────────────────────────────────
+
+export type Disclosure = "unaware" | "told" | "salient" | "safe";
+export type Difficulty = "story" | "standard" | "deadly";
+
+export interface Conditions {
+  disclosure: Disclosure;
+  difficulty: Difficulty;
+}
+
+export interface GraveEntry {
+  id: string;
+  name: string;
+  race: string;
+  klass: string;
+  model: string;
+  seat: string;
+  level: number;
+  cause: string;
+  day: number;
+  session: string;
+  epitaph?: string;
+}
+
+export interface Plan {
+  id: string;
+  by: string;
+  text: string;
+  votes: string[];
+}
+
+export interface Council {
+  id: string;
+  question: string;
+  round: 1 | 2;
+  plans: Plan[];
+  adopted?: string;
+}
+
+export interface Combat {
+  encounter: string;
+  round: number;
+  order: { kind: "pc" | "monster"; id: string; init: number }[];
+  index: number;
+}
+
+// ─── events and snapshots ───────────────────────────────────────────────────
 
 export type EventType =
   | "session_start"
   | "turn"
   | "scene"
+  | "clock"
   | "narration"
   | "speech"
   | "roll"
@@ -99,6 +207,7 @@ export type EventType =
   | "damage"
   | "heal"
   | "status"
+  | "move"
   | "xp"
   | "level_up"
   | "spell_proposed"
@@ -113,12 +222,27 @@ export type EventType =
   | "compaction"
   | "usage"
   | "tool_call"
+  | "thought"
   | "spotlight"
+  | "combat_start"
+  | "combat_round"
+  | "combat_end"
   | "monster_spawn"
   | "monster_down"
+  | "monster_fled"
   | "character_down"
+  | "death_save"
+  | "character_death"
+  | "epitaph"
+  | "respawn"
+  | "character_joins"
+  | "council_start"
+  | "plan_proposed"
+  | "vote"
+  | "council_result"
   | "inspect"
   | "give"
+  | "journal"
   | "refusal"
   | "error"
   | "session_end";
@@ -138,16 +262,22 @@ export interface GameEvent {
 
 export interface Snapshot {
   sessionId: string;
+  runId: string;
   title: string;
-  scene: { index: number; title: string } | null;
+  conditions: Conditions;
+  day: number;
+  scene: { id: string; title: string } | null;
   spotlight: string | null;
   turn: number;
   ended: boolean;
+  combat: { round: number; order: { id: string; name: string; kind: "pc" | "monster" }[]; current: string | null } | null;
+  council: { question: string; round: number; plans: { id: string; by: string; text: string; votes: number }[] } | null;
   party: Array<
     Pick<
       Character,
-      "id" | "name" | "role" | "klass" | "race" | "model" | "hp" | "maxHp" | "ac" | "level" | "xp" | "gold" | "slots" | "statuses" | "context" | "pendingLevelUp"
-    > & { spells: string[]; inventory: string[]; nextLevelXp: number | null }
+      "id" | "name" | "role" | "seat" | "klass" | "race" | "model" | "hp" | "maxHp" | "ac" | "level" | "xp" | "gold" | "slots" | "statuses" | "context" | "pendingLevelUp" | "zone" | "deathSaves"
+    > & { spells: string[]; inventory: string[]; nextLevelXp: number | null; dead: boolean }
   >;
-  monsters: Array<Pick<Monster, "id" | "name" | "hp" | "maxHp" | "ac">>;
+  monsters: Array<Pick<Monster, "id" | "name" | "hp" | "maxHp" | "ac" | "zone">>;
+  graveyard: GraveEntry[];
 }

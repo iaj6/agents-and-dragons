@@ -40,8 +40,13 @@
 
     <aside class="side">
       <div class="panel">
-        <h2>Monsters</h2>
+        <h2 id="battle-title">Enemies</h2>
+        <div id="initiative" class="initiative" hidden></div>
         <div id="monsters" class="monsters"><div class="muted">None in sight.</div></div>
+      </div>
+      <div class="panel" id="graveyard-panel" hidden>
+        <h2>The Graveyard</h2>
+        <div id="graveyard" class="graveyard"></div>
       </div>
       <div class="panel">
         <h2>The tab</h2>
@@ -49,7 +54,10 @@
       </div>
       <div class="panel ooc-panel">
         <h2>Out of character</h2>
-        <div id="ooc" class="ooc"></div>
+        <div class="filters" id="filters">
+          <button data-f="all" class="on">All</button><button data-f="thought">Thoughts</button><button data-f="tool">Tools</button><button data-f="usage">Tokens</button>
+        </div>
+        <div id="ooc" class="ooc" data-filter="all"></div>
       </div>
     </aside>
   </main>

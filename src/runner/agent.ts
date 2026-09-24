@@ -69,6 +69,7 @@ export class Agent implements Seat {
       }
       this.messages.push({ role: "assistant", content: reply.content });
       await this.report(reply.usage);
+      for (const t of reply.thoughts) await this.hall.post("/api/thought", { actor: this.id, text: t });
       if (reply.refusal) {
         await this.hall.post("/api/refusal", { actor: this.id, detail: reply.refusal });
         return said.join(" ");
@@ -92,8 +93,16 @@ export class Agent implements Seat {
    * Long rest, the Scribe's Summarize, or the GM tidying their notes: condense the whole history into a
    * summary and start over from it. For players, the memory roll decides how lossy it is.
    */
-  async compact(reason: CompactReason, roll: number) {
-    this.pushUser(compactionInstruction(reason, roll));
+  async reflect(prompt: string): Promise<string> {
+    this.pushUser(prompt);
+    const reply = await this.brain.respond({ id: this.id, role: this.role, model: this.model, system: this.system, tools: this.tools, messages: this.messages, noTools: true });
+    this.messages.push({ role: "assistant", content: reply.content });
+    await this.report(reply.usage);
+    return reply.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.Beta.BetaTextBlock).text).join("\n").trim();
+  }
+
+  async compact(reason: CompactReason, roll: number, note?: string) {
+    this.pushUser(compactionInstruction(reason, roll, note));
     const reply = await this.brain.respond({ id: this.id, role: this.role, model: this.model, system: this.system, tools: this.tools, messages: this.messages, noTools: true });
     await this.report(reply.usage);
     const summary = reply.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.Beta.BetaTextBlock).text).join("\n").trim();

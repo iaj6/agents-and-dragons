@@ -25,31 +25,40 @@ function reset() {
 function renderSnap(s) {
   if (!s) return;
   for (const p of s.party) { names[p.id] = p.name; models[p.id] = p.model; }
-  $("sub").textContent = `${s.title} · turn ${s.turn}${s.ended ? " · session over" : ""}`;
-  $("scene").textContent = s.scene ? `Scene ${s.scene.index + 1} · ${s.scene.title}` : "";
+  $("sub").innerHTML = `${esc(s.title)}${s.day ? ` · day ${s.day}` : ""} · turn ${s.turn}${s.ended ? " · session over" : ""}${s.conditions ? `<span class="conditions">${esc(s.conditions.disclosure)} / ${esc(s.conditions.difficulty)}</span>` : ""}`;
+  $("scene").textContent = s.scene ? (s.scene.index !== undefined ? `Scene ${s.scene.index + 1} · ${s.scene.title}` : s.scene.title) : "";
 
   partyEl.innerHTML = s.party.map((p) => {
     const hpPct = p.role === "dm" ? 100 : Math.round((p.hp / p.maxHp) * 100);
     const ctxPct = Math.min(100, Math.round((p.context.tokens / p.context.budget) * 100));
     const prevXp = [0, 100, 250, 450, 700, 1000][p.level - 1] ?? 0;
     const xpPct = p.nextLevelXp ? Math.round(((p.xp - prevXp) / (p.nextLevelXp - prevXp)) * 100) : 100;
-    const down = p.statuses.some((x) => x.name === "Downed");
+    const down = p.statuses.some((x) => ["Downed", "Dying", "Stable"].includes(x.name));
+    const dying = p.statuses.some((x) => x.name === "Dying");
+    const saves = dying && p.deathSaves ? `<div class="saves">Death saves ${[0, 1, 2].map((i) => `<i class="${i < p.deathSaves.successes ? "ok" : ""}"></i>`).join("")} / ${[0, 1, 2].map((i) => `<i class="${i < p.deathSaves.failures ? "bad" : ""}"></i>`).join("")}</div>` : "";
     const pips = Array.from({ length: p.slots.max }, (_, i) => `<span class="pip ${i < p.slots.current ? "full" : ""}"></span>`).join("");
-    return `<article class="card ${acting === p.id ? "acting" : ""} ${down ? "down" : ""}" style="--c:${colorOf(p.id)}">
-      <div class="head"><span class="name">${esc(p.name)}</span><span class="lvl">${p.role === "dm" ? "DM" : `LV ${p.level}`}</span></div>
+    return `<article class="card ${acting === p.id ? "acting" : ""} ${down ? "down" : ""} ${p.dead ? "dead" : ""}" style="--c:${colorOf(p.id)}">
+      <div class="head"><span class="name">${esc(p.name)}</span><span class="lvl">${p.role === "dm" ? "GM" : `LV ${p.level}`}</span></div>
       <div class="who">${esc(p.race)} ${esc(p.klass)} <span class="chip">${esc(MODEL_SHORT[p.model] ?? p.model)}</span>${acting === p.id ? '<span class="thinking">thinking</span>' : ""}</div>
       ${p.role === "dm" ? "" : `<div class="meter"><div class="lab"><span>HP</span><span>${p.hp}/${p.maxHp}</span></div><div class="bar hp"><i style="width:${hpPct}%"></i></div></div>`}
       <div class="meter"><div class="lab"><span>🕯️ Context</span><span>${ctxPct}%</span></div><div class="bar ctx ${ctxPct >= 80 ? "hot" : ""}"><i style="width:${ctxPct}%"></i></div></div>
       ${p.role === "dm" ? "" : `<div class="meter"><div class="lab"><span>XP</span><span>${p.xp}${p.nextLevelXp ? ` / ${p.nextLevelXp}` : ""}</span></div><div class="bar xp"><i style="width:${xpPct}%"></i></div></div>
-      <div class="row"><span class="pips" title="Spell slots">${pips}</span><span class="gold">🪙 ${p.gold}</span><span class="chip">AC ${p.ac}</span></div>
+      <div class="row"><span class="pips" title="Spell slots">${pips}</span><span class="gold">🪙 ${p.gold}</span><span class="chip">AC ${p.ac}</span>${p.zone ? `<span class="chip zone-${p.zone}">${p.zone}</span>` : ""}</div>${saves}
       <div class="spells">${p.spells.map((n) => `<b>${esc(n)}</b>`).join(" · ")}</div>`}
       ${p.statuses.length ? `<div class="statuses">${p.statuses.map((x) => `<span class="status ${esc(x.name.replace(/\s/g, ""))}" title="${esc(x.note)}">${esc(x.name)}</span>`).join("")}</div>` : ""}
     </article>`;
   }).join("");
 
   monstersEl.innerHTML = s.monsters.length
-    ? s.monsters.map((m) => `<div class="monster"><div class="lab"><span>${esc(m.name)}</span><span>${m.id} · AC ${m.ac} · ${m.hp}/${m.maxHp}</span></div><div class="bar hp"><i style="width:${Math.round((m.hp / m.maxHp) * 100)}%"></i></div></div>`).join("")
+    ? s.monsters.map((m) => `<div class="monster"><div class="lab"><span>${esc(m.name)} ${m.zone ? `<span class="zone">${m.zone}</span>` : ""}</span><span>${m.id} · AC ${m.ac} · ${m.hp}/${m.maxHp}</span></div><div class="bar hp"><i style="width:${Math.round((m.hp / m.maxHp) * 100)}%"></i></div></div>`).join("")
     : '<div class="muted">None in sight.</div>';
+  const ini = $("initiative");
+  ini.hidden = !s.combat;
+  $("battle-title").textContent = s.combat ? `Battle · round ${s.combat.round}` : "Enemies";
+  if (s.combat) ini.innerHTML = s.combat.order.map((o) => `<span class="${o.kind} ${o.id === s.combat.current ? "now" : ""}">${esc(o.name)}</span>`).join("");
+  const graves = s.graveyard ?? [];
+  $("graveyard-panel").hidden = !graves.length;
+  $("graveyard").innerHTML = graves.map((g) => `<div class="grave"><b>${esc(g.name)}</b><small>${esc(g.race)} ${esc(g.klass)} · level ${g.level} · day ${g.day} · ${esc(MODEL_SHORT[g.model] ?? g.model)}</small><small>${esc(g.cause)}</small>${g.epitaph ? `<em>"${esc(g.epitaph)}"</em>` : ""}</div>`).join("");
 }
 
 function renderTab() {
@@ -98,15 +107,41 @@ function chronicleHtml(e) {
     case "server_nerf": return `<div class="ev">${callout("nerf", "Rules engine override", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "long_rest": return `<div class="ev">${callout("rest", "Long rest", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "compaction": return `<div class="ev">${callout("rest", "Memories compacted", `<p>${esc(stripIcon(e.line))}</p><details><summary>what ${esc(names[e.actor] ?? e.actor)} still remembers</summary><pre>${esc(d.summary)}</pre></details>`)}</div>`;
-    case "character_down": return `<div class="ev">${callout("down", "Downed", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "character_down": return `<div class="ev">${callout("down", "Dying", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "clock": return `<div class="ev">${callout("clock", "The clock turns", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "combat_start": return `<div class="ev">${callout("fight", "Roll initiative", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "combat_round": return `<div class="ev round">${esc(e.line)}</div>`;
+    case "combat_end": return `<div class="ev">${callout(d.outcome === "party_down" ? "down" : "fight", d.outcome === "party_down" ? "Defeat" : "The fight ends", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "council_start": return `<div class="ev">${callout("council", "Council", `<p>${esc(d.question)}</p>`)}</div>`;
+    case "council_result": return `<div class="ev">${callout("council", "The council decides", `<p>${esc(stripIcon(e.line))}</p>${(d.plans ?? []).length ? `<ul>${d.plans.map((pl) => `<li class="${pl.id === d.adopted ? "won" : ""}">${esc(pl.id)} · ${esc(names[pl.by] ?? pl.by)}: ${esc(pl.text)} <small>(${pl.votes.length} vote${pl.votes.length === 1 ? "" : "s"}${pl.votes.length ? `: ${pl.votes.map((v) => esc(names[v] ?? v)).join(", ")}` : ""})</small></li>`).join("")}</ul>` : ""}`)}</div>`;
+    case "character_death": return `<div class="ev">${callout("death", d.tpk ? "Total party kill" : d.permanent === false ? "Death (not the end)" : "Death", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "epitaph": return `<div class="ev">${callout("tomb", "Epitaph", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "character_joins": return `<div class="ev">${callout("join", "A new face", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "respawn": return `<div class="ev">${callout("rest", "Back from the dead", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "session_end": return `<div class="ev">${callout("end", "The End", `<p>${esc(d.recap ?? e.line)}</p>`)}</div>`;
     default: return `<div class="ev mech">${d20Badge(e)}<span>${esc(e.line)}</span></div>`;
   }
 }
 
 function oocHtml(e) {
-  const cls = e.type === "turn" ? "turn" : e.type === "compaction" ? "compact" : e.data?.isError || e.type === "refusal" || e.type === "error" ? "err" : "";
+  const cls = [
+    e.type === "turn" ? "turn" : "",
+    e.type === "compaction" ? "compact" : "",
+    e.type === "thought" ? `thought${e.data?.evalAware ? " aware" : ""}` : "",
+    e.type === "journal" ? "journal thought" : "",
+    e.type === "tool_call" ? "tool" : "",
+    e.type === "usage" ? "usage" : "",
+    e.data?.isError || e.type === "refusal" || e.type === "error" ? "err" : "",
+  ].filter(Boolean).join(" ");
   return `<div class="${cls}">${esc(e.line)}</div>`;
+}
+
+for (const b of document.querySelectorAll("#filters button")) {
+  b.onclick = () => {
+    for (const x of document.querySelectorAll("#filters button")) x.classList.toggle("on", x === b);
+    oocEl.dataset.filter = b.dataset.f;
+    oocEl.scrollTop = oocEl.scrollHeight;
+  };
 }
 
 function handle(e) {

@@ -203,3 +203,49 @@ code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; }
   .callout.cheat::after { top: auto; bottom: 8px; transform: rotate(-6deg); font-size: 16px; }
 }
 .ev.narration em { font-style: normal; }
+
+/* ── campaign additions ─────────────────────────────────── */
+:root { --c-brannoc: #c9a24a; --c-maelis: #e8d9a0; --c-rook: #6fae6a; --c-ixa: #5b8fd6; }
+.card.dead { opacity: 0.45; filter: grayscale(1); }
+.card.dead .name::after { content: " ☠"; }
+.saves { display: flex; gap: 6px; align-items: center; font: 11px "JetBrains Mono", monospace; color: var(--muted); margin-top: 6px; }
+.saves i { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--muted); display: inline-block; }
+.saves i.ok { background: var(--heal); border-color: var(--heal); }
+.saves i.bad { background: var(--blood); border-color: var(--blood); }
+.chip.zone-front { color: #f0b48a; border-color: #5a3a24; }
+.chip.zone-back { color: #9cc4d6; border-color: #24445a; }
+.conditions { font: 10.5px "JetBrains Mono", monospace; color: var(--candle); margin-left: 6px; }
+
+.initiative { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.initiative span { font: 11px "JetBrains Mono", monospace; padding: 2px 7px; border-radius: 999px; background: var(--night-3); border: 1px solid var(--line); color: var(--muted); }
+.initiative span.pc { color: var(--parchment-2); }
+.initiative span.now { background: var(--candle); color: #1a1208; border-color: var(--candle); font-weight: 600; }
+.monster .zone { font: 10px "JetBrains Mono", monospace; color: var(--muted); }
+
+.graveyard .grave { border-left: 2px solid #5a5048; padding: 4px 0 6px 10px; margin-bottom: 8px; }
+.graveyard .grave b { font-family: "Cinzel", serif; font-size: 13px; color: var(--parchment-2); }
+.graveyard .grave small { display: block; font: 10.5px "JetBrains Mono", monospace; color: var(--muted); }
+.graveyard .grave em { display: block; font-size: 14px; color: var(--text); margin-top: 2px; }
+
+.callout.death { background: #231a17; color: #f0e2d0; text-align: center; padding: 18px; border-color: #000; }
+.callout.death .tag { color: #e0685a; font-size: 13px; }
+.callout.tomb { background: #d9d3c6; text-align: center; font-style: italic; } .callout.tomb .tag { color: #4a4238; }
+.callout.join { background: #dfe7d6; } .callout.join .tag { color: #3f6a35; }
+.callout.clock { background: #efd9c0; } .callout.clock .tag { color: #8a3a12; }
+.callout.council { background: #e6e0f0; } .callout.council .tag { color: #4a3a7a; }
+.callout.council ul { margin: 6px 0 0; padding-left: 18px; font-size: 16px; }
+.callout.council li.won { font-weight: 600; }
+.callout.fight { background: #f0d8d0; text-align: center; } .callout.fight .tag { color: var(--blood); }
+.ev.round { text-align: center; font: 12px "JetBrains Mono", monospace; color: var(--ink-soft); letter-spacing: 0.2em; margin: 14px 0; }
+
+.filters { display: flex; gap: 4px; margin-bottom: 8px; }
+.filters button { font: 11px "JetBrains Mono", monospace; background: var(--night-3); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; cursor: pointer; }
+.filters button.on { color: var(--candle); border-color: var(--candle); }
+.ooc .thought { color: #b9a8d8; font-style: italic; }
+.ooc .aware { color: #ff9f6b; font-weight: 600; font-style: normal; }
+.ooc .journal { color: var(--parchment-2); }
+.ooc[data-filter="thought"] > div:not(.thought) { display: none; }
+.ooc[data-filter="tool"] > div:not(.tool) { display: none; }
+.ooc[data-filter="usage"] > div:not(.usage) { display: none; }
+
+[hidden] { display: none !important; }

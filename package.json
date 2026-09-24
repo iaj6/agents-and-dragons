@@ -6,7 +6,8 @@
     "guildhall": "node --env-file-if-exists=.env.local --import tsx src/guildhall/server.ts",
     "play": "node --env-file-if-exists=.env.local --import tsx src/runner/run.ts",
     "mock": "node --env-file-if-exists=.env.local --import tsx src/runner/run.ts --mock",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "report": "node --import tsx src/report.ts"
   },
   "author": "",
   "license": "ISC",

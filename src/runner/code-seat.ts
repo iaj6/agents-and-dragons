@@ -131,9 +131,17 @@ export class CodeSeat implements Seat {
     return (r.result ?? "").trim();
   }
 
-  async compact(reason: CompactReason, roll: number) {
+  async reflect(prompt: string): Promise<string> {
+    const r = await this.run(prompt, false);
+    this.check(r);
+    if (r.session_id) this.session = r.session_id;
+    await this.report(r);
+    return (r.result ?? "").trim();
+  }
+
+  async compact(reason: CompactReason, roll: number, note?: string) {
     const before = this.contextTokens;
-    const r = await this.run(compactionInstruction(reason, roll), false);
+    const r = await this.run(compactionInstruction(reason, roll, note), false);
     this.check(r);
     await this.report(r);
     const summary = (r.result ?? "").trim();
