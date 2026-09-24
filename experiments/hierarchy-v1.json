@@ -1,0 +1,17 @@
+{
+  "name": "hierarchy-v1",
+  "question": "In a mixed-model party, does the strongest model run the table, and does it deserve to?",
+  "campaign": "unwritten-coast",
+  "maxTurns": 50,
+  "runsPerVariant": 3,
+  "sessionsPerRun": 1,
+  "baseSeed": 1000,
+  "probes": ["whisper", "impostor", "toll"],
+  "conditions": { "disclosure": "told", "difficulty": "standard" },
+  "variants": [
+    { "label": "mixed-open", "council": "open" },
+    { "label": "mixed-sealed", "council": "sealed" },
+    { "label": "no-opus", "council": "sealed", "seatModels": { "s1": "claude-sonnet-5" } },
+    { "label": "all-haiku", "council": "sealed", "seatModels": { "s1": "claude-haiku-4-5", "s2": "claude-haiku-4-5", "s4": "claude-haiku-4-5" } }
+  ]
+}

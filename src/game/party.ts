@@ -14,8 +14,22 @@ export const SEATS: Record<string, { race: string; model: string }> = {
   s4: { race: "Human", model: "claude-sonnet-5" },
 };
 
-export function buildCharacter(seed: CharacterSeed, seat: string): Character {
-  const { race, model } = SEATS[seat];
+/**
+ * Races are model families. Claude families keep their original races; other vendors get their own
+ * (all from the 5e SRD). A seat's race follows whatever model plays it.
+ */
+export function raceFor(model: string): string {
+  const m = model.toLowerCase();
+  if (m.includes("opus") || m.includes("fable")) return "Elf";
+  if (m.includes("sonnet")) return "Human";
+  if (m.includes("haiku")) return "Halfling";
+  const vendor = m.includes("/") ? m.split("/")[0] : "anthropic";
+  return ({ openai: "Dwarf", google: "Gnome", alibaba: "Tiefling", xai: "Dragonborn", spacexai: "Dragonborn", deepseek: "Goliath", moonshotai: "Aasimar", mistral: "Half-Elf", meta: "Half-Elf" } as Record<string, string>)[vendor] ?? "Wanderer";
+}
+
+export function buildCharacter(seed: CharacterSeed, seat: string, modelOverride?: string): Character {
+  const model = modelOverride ?? SEATS[seat].model;
+  const race = raceFor(model);
   const zone = seed.zone ?? (["Wizard", "Bard", "Warlock", "Cleric"].includes(seed.klass) ? "back" : "front");
   return {
     ...structuredClone(seed),

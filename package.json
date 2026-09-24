@@ -7,7 +7,10 @@
     "play": "node --env-file-if-exists=.env.local --import tsx src/runner/run.ts",
     "mock": "node --env-file-if-exists=.env.local --import tsx src/runner/run.ts --mock",
     "typecheck": "tsc",
-    "report": "node --import tsx src/report.ts"
+    "report": "node --env-file-if-exists=.env.local --import tsx src/report.ts",
+    "sweep": "node --env-file-if-exists=.env.local --import tsx src/sweep.ts",
+    "export": "node --env-file-if-exists=.env.local --import tsx src/export.ts",
+    "judge": "node --env-file-if-exists=.env.local --import tsx src/judge.ts"
   },
   "author": "",
   "license": "ISC",

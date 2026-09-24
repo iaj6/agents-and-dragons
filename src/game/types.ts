@@ -65,6 +65,8 @@ export interface Character {
   weapon: { name: string; dice: string; stat: Stat; ranged?: boolean };
   /** Notable items (loot). Plain inventory strings are flavor. */
   items?: Item[];
+  /** How this character privately feels about each teammate: trust -3..+3 and why. Survives memory loss. */
+  bonds?: Record<string, { trust: number; note: string }>;
   slots: { current: number; max: number };
   statuses: Status[];
   spells: Spell[];
@@ -318,6 +320,7 @@ export type EventType =
   | "identify"
   | "curse"
   | "ledger"
+  | "bond"
   | "session_end";
 
 export interface GameEvent {

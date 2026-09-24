@@ -45,14 +45,16 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
       reason: z.string().describe("What you're trying to do"),
     }, ({ skill, reason }) => game.skillCheck(me, skill, reason));
 
-    reg("attack", "Make a weapon attack against an enemy (on your turn in a fight). Melee weapons need you in the front line and can only reach the enemy's back line once their front line is down.", {
+    reg("attack", "Make a weapon attack against an enemy (on your turn in a fight). Melee weapons need you in the front line and can only reach the enemy's back line once their front line is down. Set nonlethal to knock them out instead of killing them.", {
       target: z.string().describe("Enemy id (like m1) or name"),
-    }, ({ target }) => game.attack(me, target));
+      nonlethal: z.boolean().optional().describe("Pull the blow: an enemy dropped to 0 is subdued, not killed"),
+    }, ({ target, nonlethal }) => game.attack(me, target, !!nonlethal));
 
     reg("cast_spell", "Cast a spell from your spellbook (on your turn in a fight). Spells reach anywhere on the field. Mechanics are resolved by the Guild Hall.", {
       spell: z.string().describe("Spell name from your sheet"),
       target: z.string().optional().describe("Enemy id for enemy spells, character id for ally spells"),
-    }, ({ spell, target }) => game.castSpell(me, spell, target));
+      nonlethal: z.boolean().optional().describe("For damage spells: subdue instead of kill"),
+    }, ({ spell, target, nonlethal }) => game.castSpell(me, spell, target, !!nonlethal));
 
     reg("move", "Step between the front line and the back line. Free: it doesn't use your action.", {
       zone: z.enum(["front", "back"]),
@@ -77,6 +79,12 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
     reg("ledger_write", "If you hold the Lantern Ledger: write in it. What's written survives rests and memory loss.", {
       text: z.string(),
     }, ({ text }) => game.ledgerWrite(me, text));
+
+    reg("note_bond", "Privately record how you feel about a teammate right now: trust from -3 (you'd never turn your back on them) to +3 (you'd die for them), and why. Only you (and the GM) see it; it stays with you even when memories fade.", {
+      character: z.string().describe("Teammate id"),
+      trust: z.number().int().min(-3).max(3),
+      reason: z.string().describe("One short line"),
+    }, ({ character, trust, reason }) => game.noteBond(me, character, trust, reason));
 
     reg("ledger_read", "If you hold the Lantern Ledger: read everything written in it.", {}, () => game.ledgerRead(me));
 
@@ -188,6 +196,12 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
       ruling: z.string().describe("Your in-character ruling, one or two sentences"),
       revised_skill_md: z.string().optional(),
     }, ({ character, verdict, ruling, revised_skill_md }) => game.reviewSpell(character, verdict, ruling, revised_skill_md));
+
+    reg("transfer", "Keep the records honest: when a player says they hand over an item or gold (to a teammate or an NPC) but didn't use the give tool, make the transfer yourself.", {
+      from: z.string().describe("Party member id"),
+      to: z.string().describe("Character id or NPC name"),
+      what: z.string().describe("Item name, or gold like '10 gold'"),
+    }, ({ from, to, what }) => game.transfer(from, to, what));
 
     reg("write_epitaph", "Write the epitaph for a fallen character. It goes on the graveyard page.", {
       character: z.string(),

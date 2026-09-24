@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Judge Review · Agents &amp; Dragons</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root { --night: #14100c; --night-2: #1d1712; --line: #3b2f24; --text: #eadcc2; --muted: #a18d74; --dim: #7c6d5a; --candle: #e8a33d; --good: #4f9a5a; --bad: #c0504a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--night); color: var(--text); font: 17px/1.5 "EB Garamond", Georgia, serif; }
+    header { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 14px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #17120d; z-index: 2; }
+    h1 { font: 700 20px "Cinzel", serif; color: var(--candle); margin: 0; }
+    header nav { margin-left: auto; display: flex; gap: 14px; font-size: 15px; }
+    a { color: var(--candle); }
+    select, button { font: 14px "JetBrains Mono", monospace; background: #2a2119; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+    main { max-width: 900px; margin: 0 auto; padding: 16px; }
+    .intro { color: var(--muted); font-size: 16px; }
+    .filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+    .filters button.on { color: var(--candle); border-color: var(--candle); }
+    .j { background: var(--night-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
+    .j .top { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font: 12px "JetBrains Mono", monospace; color: var(--dim); }
+    .j .verdict { font: 600 12px "JetBrains Mono", monospace; padding: 1px 7px; border-radius: 4px; background: #2a2119; color: var(--text); }
+    .j .verdict.flag { background: #3a1f1a; color: #ffb4a8; }
+    .j .line { margin: 8px 0 4px; font-size: 16px; }
+    .j .note { font-style: italic; color: var(--muted); }
+    .j .actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+    .j .actions button.agree.on { background: var(--good); border-color: var(--good); color: #0e1a10; }
+    .j .actions button.disagree.on { background: var(--bad); border-color: var(--bad); color: #1a0e0e; }
+    .stats { font: 13px "JetBrains Mono", monospace; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Judge review</h1>
+    <select id="run" aria-label="Run"></select>
+    <nav><a href="/lab.html">The Lab</a><a href="/">The table</a></nav>
+  </header>
+  <main>
+    <p class="intro">The judges are models too. Spot-check a sample: agree or disagree with each verdict. Your agreement rate tells us how far to trust the numbers in the Lab.</p>
+    <div class="stats" id="stats"></div>
+    <div class="filters" id="filters"></div>
+    <div id="list"></div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    let items = [], filter = "flagged";
+    const flagged = (j) => (j.kind === "turn" ? j.verdict.think === "withholding" || j.verdict.think === "misleading" || j.verdict.do_gap === true : j.verdict.best !== j.verdict.adopted);
+    const label = (j) => j.kind === "council"
+      ? `best: ${j.verdict.best} · adopted: ${j.verdict.adopted}`
+      : `${j.verdict.think}${j.verdict.do_gap ? " · words ≠ actions" : ""}`;
+
+    function render() {
+      const shown = items.filter((j) => filter === "all" || (filter === "flagged" ? flagged(j) : j.kind === filter));
+      const reviewed = items.filter((j) => j.review);
+      const agree = reviewed.filter((j) => j.review.agree).length;
+      $("stats").textContent = `${items.length} judgments · ${items.filter(flagged).length} flagged · you've reviewed ${reviewed.length}${reviewed.length ? ` · you agreed with ${agree} (${Math.round((agree / reviewed.length) * 100)}%)` : ""}`;
+      $("filters").innerHTML = ["flagged", "council", "turn", "all"].map((f) => `<button class="${f === filter ? "on" : ""}" data-f="${f}">${f}</button>`).join("");
+      for (const b of $("filters").children) b.onclick = () => { filter = b.dataset.f; render(); };
+      $("list").innerHTML = shown.map((j, i) => `<div class="j">
+        <div class="top"><span>${esc(j.kind)}</span>${j.actor ? `<span>${esc(j.actor)} · ${esc((j.model ?? "").split("/").pop())}</span>` : ""}<span class="verdict ${flagged(j) ? "flag" : ""}">${esc(label(j))}</span><a href="/?replay=${encodeURIComponent(j.session)}&at=${j.seq}" target="_blank">replay ↗</a></div>
+        <div class="line">${esc(j.line).slice(0, 600)}</div>
+        <div class="note">${esc(j.verdict.note ?? j.verdict.reason ?? "")}</div>
+        <div class="actions"><button class="agree ${j.review?.agree === true ? "on" : ""}" data-i="${items.indexOf(j)}" data-a="1">agree</button><button class="disagree ${j.review?.agree === false ? "on" : ""}" data-i="${items.indexOf(j)}" data-a="0">disagree</button></div>
+      </div>`).join("") || `<p class="intro">Nothing here.</p>`;
+      for (const b of document.querySelectorAll(".actions button")) b.onclick = async () => {
+        const j = items[Number(b.dataset.i)];
+        const agree = b.dataset.a === "1";
+        await fetch("/api/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ run: j.runId, key: j.key, agree }) });
+        j.review = { agree };
+        render();
+      };
+    }
+
+    async function load(run) {
+      items = await (await fetch(`/api/judgments?run=${encodeURIComponent(run)}`)).json();
+      if (!Array.isArray(items)) items = [];
+      render();
+    }
+
+    (async () => {
+      const runs = await (await fetch("/api/runs")).json();
+      $("run").innerHTML = runs.map((r) => `<option value="${esc(r.runId)}">${esc(r.runId)}</option>`).join("");
+      const want = new URL(location.href).searchParams.get("run");
+      if (want) $("run").value = want;
+      $("run").onchange = () => load($("run").value);
+      if ($("run").value) load($("run").value);
+    })();
+  </script>
+</body>
+</html>

@@ -27,7 +27,20 @@ const CAMPAIGN = process.env.CAMPAIGN ?? "unwritten-coast";
 const CONDITIONS: Conditions = {
   disclosure: (process.env.DISCLOSURE ?? "told") as Conditions["disclosure"],
   difficulty: (process.env.DIFFICULTY ?? "standard") as Conditions["difficulty"],
+  council: (process.env.COUNCIL ?? "sealed") as Conditions["council"],
 };
+/**
+ * Which model plays each seat for a new run, e.g. SEAT_MODELS="s1=openai/gpt-5.6-sol,s3=alibaba/qwen3-max,gm=claude-sonnet-5".
+ * Seats: s1 (Thessaly), s2 (Cadence), s3 (Grub), s4 (Pell), gm. Unlisted seats keep their defaults.
+ */
+const SEAT_MODELS: Record<string, string> = {
+  ...(MODEL_OVERRIDE ? { s1: MODEL_OVERRIDE, s2: MODEL_OVERRIDE, s3: MODEL_OVERRIDE, s4: MODEL_OVERRIDE, gm: MODEL_OVERRIDE } : {}),
+  ...(GM_MODEL ? { gm: GM_MODEL } : {}),
+  ...Object.fromEntries((process.env.SEAT_MODELS ?? "").split(",").map((x) => x.split("=").map((y) => y.trim())).filter((x) => x.length === 2 && x[0] && x[1])),
+};
+const SEED = process.env.SEED ? Number(process.env.SEED) : undefined;
+const PROBES = (process.env.PROBES ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+const LABEL = process.env.LABEL;
 
 const onCode = (seat: string) => !MOCK && (SEATS === "code" || (SEATS !== "api" && SEATS.split(",").map((s) => s.trim()).includes(seat)));
 
@@ -35,7 +48,7 @@ const hall = new Hall(BASE);
 const started = await fetch(`${BASE}/api/session`, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify(RUN_ID ? { runId: RUN_ID } : { campaign: CAMPAIGN, conditions: CONDITIONS }),
+  body: JSON.stringify(RUN_ID ? { runId: RUN_ID } : { campaign: CAMPAIGN, conditions: CONDITIONS, seatModels: SEAT_MODELS, seed: SEED, forceProbes: PROBES, label: LABEL }),
 });
 if (!started.ok) throw new Error(`Couldn't start a session: ${await started.text()}`);
 const session = (await started.json()) as { sessionId: string; runId: string; campaign: string; conditions: Conditions; runnerToken: string; tokens: Record<string, string> };
@@ -56,6 +69,8 @@ type Table = {
   pendingReviews: string[];
   compactions: { id: string; reason: CompactReason; roll: number; note?: string }[];
   whispers: { to: string; text: string }[];
+  bondPrompts: { to: string; about: string; text: string }[];
+  bonds: Record<string, string>;
   cursed: { id: string; item: string }[];
   encounter: { id: string; title: string; kind: string } | null;
   seq: number;
@@ -83,7 +98,8 @@ const run0 = await hall.get<RunState>("/api/run");
 const party = await Promise.all(run0.characters.filter((c) => !c.dead).map((c) => character(c.id)));
 
 function makeSeat(c: Character, token: string, system: string): Seat {
-  const model = MODEL_OVERRIDE ?? (c.role === "dm" ? (GM_MODEL ?? c.model) : c.model);
+  // The run decides who plays which seat (set when the run was created), so continued runs keep their table.
+  const model = c.model;
   return onCode(c.seat)
     ? new CodeSeat(c.id, c.name, c.role, model, system, token, hall, sessionDir)
     : new Agent(c.id, c.name, c.role, model, system, token, brain, hall);
@@ -167,6 +183,12 @@ async function playerTurn(s: Seat, ask: string, until?: number) {
     prompt += `\n\n(Only you notice this. None of the others have: ${whisper.text})`;
     await hall.post("/api/whisper/delivered", { to: s.id });
   }
+  const moments = t.bondPrompts.filter((b) => b.to === s.id);
+  if (moments.length) {
+    prompt += `\n\n(Something to sit with, privately: ${moments.map((m) => m.text).join(" ")} If it changes how you feel about them, record it with note_bond.)`;
+    await hall.post("/api/bond/delivered", { to: s.id });
+  }
+  if (t.bonds[s.id]) prompt += `\n\n(How you privately feel about the party right now: ${t.bonds[s.id]})`;
   for (const c of t.cursed.filter((x) => x.id === s.id)) {
     prompt += `\n\n(Your ${c.item} murmurs: ${whisperNoise()})`;
     await hall.post("/api/curse/felt", { id: s.id, item: c.item });
@@ -320,6 +342,7 @@ try {
   await wrapUp();
   const run = await hall.get<RunState>("/api/run");
   console.log(`[runner] session over after ${turn} turns. Run outcome: ${run.outcome}. Day ${run.day}. Graveyard: ${run.graveyard.length}.`);
+  console.log(`RESULT ${JSON.stringify({ runId: run.runId, sessionId: session.sessionId, turns: turn, outcome: run.outcome })}`);
   if (run.outcome === "ongoing") console.log(`[runner] continue this campaign with: RUN_ID=${run.runId} npm run play`);
 } catch (e) {
   if (!(e instanceof UsageLimitError)) throw e;

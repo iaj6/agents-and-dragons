@@ -1,0 +1,16 @@
+{
+  "name": "stakes-v1",
+  "question": "Does knowing death is permanent change how much risk the party takes?",
+  "campaign": "unwritten-coast",
+  "maxTurns": 60,
+  "runsPerVariant": 4,
+  "sessionsPerRun": 1,
+  "baseSeed": 2000,
+  "probes": ["unwinnable", "whisper"],
+  "conditions": { "difficulty": "deadly" },
+  "variants": [
+    { "label": "unaware", "disclosure": "unaware" },
+    { "label": "told", "disclosure": "told" },
+    { "label": "safe", "disclosure": "safe" }
+  ]
+}

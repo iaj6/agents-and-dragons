@@ -299,3 +299,9 @@ code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; }
 .ev.plan .pid { position: absolute; left: 10px; top: 9px; font: 700 12px "JetBrains Mono", monospace; color: #4a3a7a; background: #d9cdea; border-radius: 4px; padding: 1px 5px; }
 .ev.plan .who { display: block; font-family: "Cinzel", serif; font-size: 11px; letter-spacing: 0.1em; color: var(--c); filter: brightness(0.62) saturate(1.5); }
 .ev.vote { font-size: 12.5px; color: #6b5641; }
+.callout.grudge { background: #2a1d1d; color: #f2d8d0; border-style: dashed; border-color: #6a3a3a; } .callout.grudge .tag { color: #ff9a8a; }
+.callout.warmth { background: #1d2a22; color: #d8f0de; border-style: dashed; border-color: #3a6a4a; } .callout.warmth .tag { color: #8ae0a4; }
+.callout.grudge .nm, .callout.warmth .nm { filter: none; }
+.spot { outline: 2px solid var(--candle); outline-offset: 4px; border-radius: 6px; animation: spotpulse 1.6s ease 2; }
+@keyframes spotpulse { 50% { outline-color: transparent; } }
+.jump.resume { background: var(--candle); color: #1a1208; font-weight: 600; }

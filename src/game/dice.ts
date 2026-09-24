@@ -1,8 +1,37 @@
-import { randomInt } from "node:crypto";
+/**
+ * Dice live on the server. Nobody else gets to roll. They're seeded per session, so experiments can be
+ * replayed like for like (the stream still diverges once agents make different choices).
+ */
+function mulberry32(a: number) {
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
-/** Dice live on the server. Nobody else gets to roll. */
+/** Mix numbers and strings into a 32-bit seed. */
+export function hashSeed(...parts: (string | number)[]): number {
+  let h = 2166136261;
+  for (const ch of parts.join("|")) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return h >>> 0;
+}
+
+let stream = mulberry32(hashSeed(Date.now()));
+
+export function seedDice(seed: number) {
+  stream = mulberry32(seed);
+}
+
+/** A separate, independent stream (e.g. the encounter schedule for a given day). */
+export function rngFor(...parts: (string | number)[]): () => number {
+  return mulberry32(hashSeed(...parts));
+}
+
 export function die(sides: number): number {
-  return randomInt(1, sides + 1);
+  return 1 + Math.floor(stream() * sides);
 }
 
 export interface DiceExpr {

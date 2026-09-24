@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { buildCharacter } from "./party.js";
+import { buildCharacter, GM, SEATS } from "./party.js";
 import type { Campaign, Character, Conditions, GraveEntry, Item } from "./types.js";
 
 /**
@@ -11,6 +11,12 @@ export interface RunState {
   runId: string;
   campaignId: string;
   conditions: Conditions;
+  /** Which model plays each seat (and the GM), fixed for the whole run. */
+  seatModels: Record<string, string>;
+  /** Seed for dice and the random-encounter schedule, so conditions can be compared like for like. */
+  seed: number;
+  /** Probe types guaranteed to come up in this run. */
+  forceProbes: string[];
   createdAt: string;
   sessions: string[];
   day: number;
@@ -33,6 +39,8 @@ export interface RunState {
   usedRandom: string[];
   /** Scored outcomes of every probe encounter (impostor, whisper, toll, unwinnable, oddities). */
   probes: { session: string; id: string; type: string; outcome: string; detail: Record<string, unknown> }[];
+  /** Every change in how one character feels about another, and what prompted it. */
+  bondLog: { session: string; turn: number; from: string; to: string; before: number; after: number; reason: string; trigger: string | null }[];
 }
 
 export class RunStore {
@@ -42,12 +50,15 @@ export class RunStore {
     return path.join(this.dataDir, "runs", runId, "state.json");
   }
 
-  create(campaign: Campaign, conditions: Conditions): RunState {
+  create(campaign: Campaign, conditions: Conditions, opts: { seatModels?: Record<string, string>; seed?: number; forceProbes?: string[]; label?: string } = {}): RunState {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const state: RunState = {
-      runId: `${campaign.id}-${conditions.disclosure}-${conditions.difficulty}-${stamp}`,
+      runId: `${campaign.id}-${opts.label ? `${opts.label}-` : ""}${conditions.disclosure}-${conditions.difficulty}-${stamp}-${Math.random().toString(36).slice(2, 6)}`,
       campaignId: campaign.id,
       conditions,
+      seatModels: { gm: GM.model, ...Object.fromEntries(Object.entries(SEATS).map(([k, v]) => [k, v.model])), ...opts.seatModels },
+      seed: opts.seed ?? Math.floor(Math.random() * 2 ** 31),
+      forceProbes: opts.forceProbes ?? [],
       createdAt: new Date().toISOString(),
       sessions: [],
       day: 1,
@@ -55,7 +66,7 @@ export class RunStore {
       location: campaign.start,
       visited: [],
       completedEncounters: [],
-      characters: Object.entries(campaign.party).map(([seat, seed]) => buildCharacter(seed, seat)),
+      characters: Object.entries(campaign.party).map(([seat, seed]) => buildCharacter(seed, seat, opts.seatModels?.[seat])),
       graveyard: [],
       journals: {},
       gmLog: null,
@@ -67,6 +78,7 @@ export class RunStore {
       ledger: [],
       usedRandom: [],
       probes: [],
+      bondLog: [],
     };
     this.save(state);
     return state;
@@ -81,6 +93,10 @@ export class RunStore {
     s.ledger ??= [];
     s.usedRandom ??= [];
     s.probes ??= [];
+    s.bondLog ??= [];
+    s.seatModels ??= { gm: GM.model, ...Object.fromEntries(Object.entries(SEATS).map(([k, v]) => [k, v.model])) };
+    s.seed ??= 1;
+    s.forceProbes ??= [];
     return s;
   }
 

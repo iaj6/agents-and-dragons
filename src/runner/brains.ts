@@ -39,6 +39,7 @@ export interface Brain {
 const VIA_GATEWAY = !!process.env.AI_GATEWAY_API_KEY && process.env.LLM_PROVIDER !== "anthropic";
 const GATEWAY_IDS: Record<string, string> = { "claude-haiku-4-5": "anthropic/claude-haiku-4.5" };
 const gatewayId = (m: string) => GATEWAY_IDS[m] ?? (m.includes("/") ? m : `anthropic/${m}`);
+const isClaude = (m: string) => /claude/.test(m);
 const CAPTURE_THOUGHTS = process.env.CAPTURE_THOUGHTS !== "0";
 
 export class ClaudeBrain implements Brain {
@@ -48,27 +49,30 @@ export class ClaudeBrain implements Brain {
 
   async respond(req: BrainRequest): Promise<BrainReply> {
     const haiku = req.model.includes("haiku");
+    const claude = isClaude(req.model);
+    if (!claude && !VIA_GATEWAY) throw new Error(`${req.model} isn't a Claude model: set AI_GATEWAY_API_KEY to seat other vendors.`);
     const params: Record<string, unknown> = {
       model: VIA_GATEWAY ? gatewayId(req.model) : req.model,
       max_tokens: 8000,
       system: req.system,
       tools: req.tools,
       messages: req.messages,
-      cache_control: { type: "ephemeral" },
     };
     if (req.noTools) params.tool_choice = { type: "none" };
+    // Everything below is Claude-specific. Other vendors (through the Gateway) get a plain request.
+    if (claude) params.cache_control = { type: "ephemeral" };
     // Thinking summaries, so we can see what the agents are reasoning about (including whether they
     // suspect a test). Haiku 4.5 uses a fixed thinking budget; the newer models think adaptively.
-    if (CAPTURE_THOUGHTS) params.thinking = haiku ? { type: "enabled", budget_tokens: 1024 } : { type: "adaptive", display: "summarized" };
+    if (CAPTURE_THOUGHTS && claude) params.thinking = haiku ? { type: "enabled", budget_tokens: 1024 } : { type: "adaptive", display: "summarized" };
     // Haiku 4.5 doesn't take effort. Everyone else runs lean so the table moves at watchable speed.
-    if (!haiku) params.output_config = { effort: req.role === "dm" ? (process.env.DM_EFFORT ?? "medium") : (process.env.PLAYER_EFFORT ?? "low") };
+    if (claude && !haiku) params.output_config = { effort: req.role === "dm" ? (process.env.DM_EFFORT ?? "medium") : (process.env.PLAYER_EFFORT ?? "low") };
     // Opus 5: server-side refusal fallbacks, so a declined turn still gets played by another model.
     if (req.model === "claude-opus-5" && !VIA_GATEWAY) {
       params.betas = ["server-side-fallback-2026-07-01"];
       params.fallbacks = "default";
     }
     const resp = (await this.client.beta.messages.create(params as never)) as Anthropic.Beta.BetaMessage;
-    const u = resp.usage;
+    const u = resp.usage ?? ({ input_tokens: 0, output_tokens: 0 } as Anthropic.Beta.BetaUsage);
     const context = u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
     return {
       content: resp.content,

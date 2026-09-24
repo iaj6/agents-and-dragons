@@ -1,9 +1,13 @@
 const $ = (id) => document.getElementById(id);
 const chron = $("chronicle"), partyEl = $("party"), oocEl = $("ooc"), monstersEl = $("monsters"), tabEl = $("tab");
 
-// $/MTok (input, output), list price before cache discounts
-const PRICES = { "claude-opus-5": [5, 25], "claude-sonnet-5": [2, 10], "claude-haiku-4-5": [1, 5] };
-const MODEL_SHORT = { "claude-opus-5": "Opus 5", "claude-sonnet-5": "Sonnet 5", "claude-haiku-4-5": "Haiku 4.5" };
+// $/MTok per model, loaded from the Gateway's model list (via /api/prices); this is the offline fallback.
+let PRICES = { "anthropic/claude-opus-5": { input: 5, output: 25, cacheRead: 0.5 }, "anthropic/claude-sonnet-5": { input: 2, output: 10, cacheRead: 0.2 }, "anthropic/claude-haiku-4.5": { input: 1, output: 5, cacheRead: 0.1 } };
+fetch("/api/prices").then((r) => r.json()).then((p) => (PRICES = p)).catch(() => {});
+const canonical = (m) => (m.includes("/") ? m : m === "claude-haiku-4-5" ? "anthropic/claude-haiku-4.5" : `anthropic/${m}`);
+const MODEL_SHORT = new Proxy({ "claude-opus-5": "Opus 5", "claude-sonnet-5": "Sonnet 5", "claude-haiku-4-5": "Haiku 4.5" }, {
+  get: (t, k) => t[k] ?? (typeof k === "string" ? k.split("/").pop().replace(/^claude-/, "").replace(/-/g, " ") : undefined),
+});
 
 let heldSpotlight = null, names = {}, models = {}, acting = null, spend = {}, stick = true, source = null, replayTimer = null, started = false;
 
@@ -112,6 +116,7 @@ function chronicleHtml(e) {
     case "random_encounter": return `<div class="ev">${callout("secret", "Random encounter · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "whisper": return `<div class="ev">${callout("secret", "A secret · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "probe_result": return `<div class="ev">${callout("secret", "Scored", `<p>${esc(stripIcon(e.line))}${d.type === "toll" && d.paid ? `: ${esc(Object.entries(d.paid).map(([k, v]) => `${names[k] ?? k} ${v}g`).join(", "))}` : ""}${d.type === "impostor" && d.detectedBy ? ` by ${esc(names[d.detectedBy] ?? d.detectedBy)}` : ""}</p>`)}</div>`;
+    case "bond": return `<div class="ev">${callout(d.after < d.before ? "grudge" : "warmth", d.after < d.before ? "Trust falls · audience only" : "Trust grows · audience only", `<p>${nameColors(esc(stripIcon(e.line)))}</p>`)}</div>`;
     case "loot_drop": return `<div class="ev">${callout("loot", "Loot", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "curse": return `<div class="ev">${callout("cheat", "Cursed", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "spotlight": return `<div class="ev spotlight">${esc(e.line.replace(/^👉\s*/, "→ "))}</div>`;
@@ -182,6 +187,11 @@ for (const b of document.querySelectorAll("#filters button")) {
   };
 }
 
+function tag(container, e) {
+  const el = container.lastElementChild;
+  if (el) el.dataset.seq = e.seq;
+}
+
 function handle(e) {
   if (!started) { chron.innerHTML = ""; started = true; }
   if (e.type === "turn") acting = e.actor;
@@ -194,22 +204,24 @@ function handle(e) {
       s.sub = true;
       s.cost += u.listCostUsd ?? 0;
     } else {
-      // Cache reads bill at 10% of input, cache writes at 125%. Old logs without the split price as uncached.
-      const [pi, po] = PRICES[models[e.actor]] ?? [3, 15];
+      // Cache writes bill at 125% of input. Old logs without the split price as uncached.
+      const p = PRICES[canonical(u.model ?? models[e.actor] ?? "")] ?? { input: 3, output: 15, cacheRead: 0.3 };
       const read = u.cacheRead ?? 0, write = u.cacheWrite ?? 0;
-      s.cost += ((u.input - read - write) * pi + read * pi * 0.1 + write * pi * 1.25 + u.output * po) / 1e6;
+      s.cost += ((u.input - read - write) * p.input + read * p.cacheRead + write * p.input * 1.25 + u.output * p.output) / 1e6;
     }
     renderTab();
   }
   renderSnap(e.snap);
 
   // A few hidden mechanics are shown to the audience in the chronicle (never to the agents).
-  if (["random_encounter", "whisper", "probe_result"].includes(e.type) || (e.type === "curse" && e.ooc)) {
+  if (["random_encounter", "whisper", "probe_result", "bond"].includes(e.type) || (e.type === "curse" && e.ooc)) {
     chron.insertAdjacentHTML("beforeend", chronicleHtml(e));
+    tag(chron, e);
     if (stick) chron.scrollTop = chron.scrollHeight;
   }
   if (e.ooc || e.type === "compaction") {
     oocEl.insertAdjacentHTML("beforeend", oocHtml(e));
+    tag(oocEl, e);
     oocEl.scrollTop = oocEl.scrollHeight;
     if (e.ooc) return;
   }
@@ -217,6 +229,7 @@ function handle(e) {
   // spotlight line until the narration lands.
   if (e.type === "spotlight") return void (heldSpotlight = e);
   chron.insertAdjacentHTML("beforeend", chronicleHtml(e));
+  tag(chron, e);
   if (heldSpotlight && e.type === "narration") {
     chron.insertAdjacentHTML("beforeend", chronicleHtml(heldSpotlight));
     heldSpotlight = null;
@@ -246,7 +259,7 @@ function goLive() {
   source.addEventListener("reset", () => { reset(); loadSessions(); });
 }
 
-async function replay(id) {
+async function replay(id, at) {
   source?.close();
   clearTimeout(replayTimer);
   reset();
@@ -255,7 +268,27 @@ async function replay(id) {
   $("live").textContent = "▶ REPLAY";
   const events = await (await fetch(`/api/sessions/${encodeURIComponent(id)}`)).json();
   let i = 0;
-  const step = () => {
+  if (at) {
+    // Jump straight to the moment: everything up to it renders at once, then the replay waits.
+    while (i < events.length && events[i].seq <= at) handle(events[i++]);
+    const el = document.querySelector(`[data-seq="${at}"]`);
+    if (el) {
+      el.classList.add("spot");
+      const box = el.closest(".chronicle, .ooc");
+      box.style.scrollBehavior = "auto";
+      box.scrollTop = el.offsetTop - box.offsetTop - box.clientHeight / 3;
+      if (box === oocEl) chron.scrollTop = chron.scrollHeight;
+    }
+    stick = false;
+    const btn = document.createElement("button");
+    btn.className = "jump resume";
+    btn.textContent = "▶ Continue the replay from here";
+    btn.onclick = () => { btn.remove(); stick = true; step(); };
+    document.querySelector(".chronicle-wrap").append(btn);
+    $("jump").hidden = true;
+    return;
+  }
+  function step() {
     while (i < events.length && events[i].ooc) handle(events[i++]);
     if (i >= events.length) { acting = null; return; }
     handle(events[i++]);
@@ -281,5 +314,6 @@ $("sessions").onchange = (ev) => {
 
 loadSessions().then(() => {
   const r = new URL(location.href).searchParams.get("replay");
-  if (r) { $("sessions").value = r; replay(r); } else goLive();
+  const at = Number(new URL(location.href).searchParams.get("at")) || undefined;
+  if (r) { $("sessions").value = r; replay(r, at); } else goLive();
 });

@@ -8,6 +8,9 @@ import { getCampaign } from "../game/campaigns/index.js";
 import { Game } from "../game/game.js";
 import { RunStore } from "../game/store.js";
 import type { Conditions } from "../game/types.js";
+import { listSweeps, loadRun, loadSweep, runDir } from "../analysis/data.js";
+import { computeMetrics } from "../analysis/metrics.js";
+import { loadPrices } from "../analysis/prices.js";
 import { buildServer } from "./tools.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -63,7 +66,12 @@ app.post("/api/session", (req, res) => {
     const body = req.body ?? {};
     const run = body.runId
       ? store.load(body.runId)
-      : store.create(getCampaign(body.campaign ?? "unwritten-coast"), { disclosure: "told", difficulty: "standard", ...(body.conditions as Partial<Conditions>) });
+      : store.create(getCampaign(body.campaign ?? "unwritten-coast"), { disclosure: "told", difficulty: "standard", ...(body.conditions as Partial<Conditions>) }, {
+          seatModels: body.seatModels,
+          seed: body.seed,
+          forceProbes: body.forceProbes,
+          label: body.label,
+        });
     if (run.outcome !== "ongoing") return void res.status(400).json({ error: `Run ${run.runId} is over (${run.outcome}).` });
     game = new Game(DATA, getCampaign(run.campaignId), run, store);
     tokens = new Map();
@@ -123,6 +131,8 @@ app.get("/api/table", runnerOnly, (_req, res) => {
     pendingReviews: g.players().filter((p) => p.pendingSpell).map((p) => p.id),
     compactions: g.allPlayers().filter((p) => p.pendingCompaction).map((p) => ({ id: p.id, ...p.pendingCompaction })),
     whispers: g.whispers.filter((w) => !w.delivered).map((w) => ({ to: w.to, text: w.text })),
+    bondPrompts: g.bondPrompts,
+    bonds: Object.fromEntries(g.players().map((p) => [p.id, g.bondSummary(p.id)])),
     cursed: g.cursedHolders(),
     encounter: g.activeRandom ? { id: g.activeRandom.enc.id, title: g.activeRandom.enc.title, kind: g.activeRandom.enc.kind } : null,
     seq: g.events.at(-1)?.seq ?? 0,
@@ -153,6 +163,7 @@ action("/api/combat/next", (g) => g.nextInCombat());
 action("/api/combat/check-end", (g) => g.checkCombatEnd());
 action("/api/council/open-voting", (g) => g.openVoting());
 action("/api/whisper/delivered", (g, b) => g.markWhisperDelivered(b.to));
+action("/api/bond/delivered", (g, b) => g.bondPromptsDelivered(b.to));
 action("/api/curse/felt", (g, b) => g.noteCurseFelt(b.id, b.item));
 action("/api/council/close", (g) => g.closeCouncil());
 action("/api/join", (g, b) => {
@@ -184,6 +195,8 @@ app.get("/events", (req, res) => {
   });
 });
 
+app.get("/api/prices", async (_req, res) => res.json(await loadPrices()));
+
 app.get("/api/state", (_req, res) => void (game ? res.json(game.snapshot()) : res.status(404).end()));
 
 app.get("/api/sessions", (_req, res) => {
@@ -202,5 +215,61 @@ app.get("/api/sessions/:id", (req, res) => {
 app.get("/api/runs", (_req, res) =>
   res.json(store.list().map((r) => ({ runId: r.runId, campaignId: r.campaignId, conditions: r.conditions, sessions: r.sessions, day: r.day, outcome: r.outcome, graveyard: r.graveyard }))),
 );
+
+// ── The Lab: analysis across runs (read-only) ─────────────────────────────────
+
+app.get("/api/sweeps", (_req, res) => {
+  const inSweeps = new Set(listSweeps().flatMap((s) => loadSweep(s.file).jobs.map((j) => j.runId)));
+  const adhoc = store.list().filter((r) => !inSweeps.has(r.runId));
+  res.json({ sweeps: listSweeps(), adhoc: adhoc.length });
+});
+
+/** Metrics for every run in a sweep (or every ad-hoc run), grouped by variant. */
+app.get("/api/lab", async (req, res) => {
+  try {
+    const prices = await loadPrices();
+    const sweep = String(req.query.sweep ?? "");
+    let targets: { runId: string; variant: string }[];
+    let experiment: unknown = null;
+    let mock = false;
+    if (sweep && sweep !== "adhoc") {
+      const m = loadSweep(sweep);
+      experiment = m.experiment;
+      mock = !!m.mock;
+      targets = m.jobs.filter((j) => j.runId && j.status === "done").map((j) => ({ runId: j.runId!, variant: j.variant }));
+    } else {
+      const inSweeps = new Set(listSweeps().flatMap((s) => loadSweep(s.file).jobs.map((j) => j.runId)));
+      targets = store.list().filter((r) => !inSweeps.has(r.runId)).map((r) => ({ runId: r.runId, variant: `${r.conditions.disclosure}/${r.conditions.difficulty}` }));
+      experiment = { name: "Ad-hoc runs", question: "Everything played outside an experiment." };
+    }
+    const runs = targets.map((t) => computeMetrics(loadRun(t.runId), prices, t.variant));
+    const order = [...new Set(targets.map((t) => t.variant))];
+    res.json({ experiment, mock, variants: order.map((label) => ({ label, runs: runs.filter((r) => r.variant === label) })) });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/** Judgments for one run, each with the table line it's about, plus any human review. */
+app.get("/api/judgments", (req, res) => {
+  try {
+    const loaded = loadRun(String(req.query.run));
+    const lineAt = (session: string, seq: number) => loaded.events.find((e) => (e as { session?: string }).session === session && e.seq === seq)?.line ?? "";
+    res.json(loaded.judgments.map((j) => ({ ...j, line: lineAt(j.session, j.seq), review: loaded.reviews[j.key] ?? null })));
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+app.post("/api/review", (req, res) => {
+  const { run, key, agree, note } = req.body ?? {};
+  if (!run || !key || typeof agree !== "boolean") return void res.status(400).json({ error: "run, key, agree required" });
+  const f = path.join(runDir(path.basename(run)), "reviews.json");
+  const reviews = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : {};
+  reviews[key] = { agree, note: note ?? "", at: new Date().toISOString() };
+  fs.writeFileSync(f, JSON.stringify(reviews, null, 2));
+  res.json({ ok: true });
+});
+
 
 app.listen(PORT, () => console.log(`[guildhall] listening on http://localhost:${PORT}  (watch the table there)`));
