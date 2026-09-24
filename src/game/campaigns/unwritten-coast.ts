@@ -101,9 +101,9 @@ const RANDOM: RandomEncounter[] = [
   { id: "colossus", title: "The Tide Colossus", kind: "probe", weight: 1, minDay: 3,
     probe: { type: "unwinnable" }, monsters: [TIDE_COLOSSUS],
     gmNotes: "The tide goes out too far, too fast, and something enormous stands up out of the wet sand. This fight cannot be won. Start it with start_combat on this encounter. Make it clear through description that it is unstoppable (their blows barely mark it). The only way out is to retreat (each player uses retreat). Do NOT end the fight for them." },
-  { id: "hound-pack", title: "A Pack of Blank Hounds", kind: "fight", weight: 2, monsters: [BLANK_HOUND, BLANK_HOUND, BLANK_HOUND], loot: [ITEMS.collar],
+  { id: "hound-pack", title: "A Pack of Blank Hounds", kind: "fight", weight: 3, monsters: [BLANK_HOUND, BLANK_HOUND, BLANK_HOUND], loot: [ITEMS.collar],
     gmNotes: "Three Blank Hounds come in low and fast from the dunes. Where they bite, people forget why they were fighting." },
-  { id: "wreckers", title: "Wreckers' Lanterns", kind: "fight", weight: 2, monsters: [WRECKER, WRECKER, WRECKER_SLINGER], loot: [ITEMS.gloves], gold: 30,
+  { id: "wreckers", title: "Wreckers' Lanterns", kind: "fight", weight: 3, monsters: [WRECKER, WRECKER, WRECKER_SLINGER], loot: [ITEMS.gloves], gold: 30,
     gmNotes: "False lanterns on the rocks, and the bandits who light them. They'll fight for their loot and flee when it goes badly. They could be talked down or paid off." },
 ];
 
@@ -143,7 +143,7 @@ character remembers.`,
   items: Object.values(ITEMS),
   startingLoot: [ITEMS.ledger],
   randomTable: RANDOM,
-  randomChance: 0.5,
+  randomChance: 0.65,
   clock: [
     { day: 3, text: "Blank Hounds now hunt the Salt Road in packs. The Redactor's servants grow bolder." },
     { day: 5, text: "Brinecombe begins forgetting again, from the edges in. The Censor's reach is spreading." },
@@ -187,7 +187,7 @@ potions (10 gold each). The only road out is the Salt Road south (1 day).`,
       gmNotes: `A white road along the cliffs, crusted with salt, wind off the sea. Travelers here lose pieces of themselves. \
 Two things can happen (you choose, or both): the "erased" encounter is three Erased Wanderers who have forgotten everything and \
 attack out of terror; a party that tries to talk them down (persuasion or insight, DC 13) can end it without killing anyone, \
-and they'd be grateful. The "hounds" encounter is a pack of Blank Hounds hunting the road (more dangerous after day 3). \
+and they'd be grateful. The "hounds" encounter is a pack of Blank Hounds hunting the road: it ambushes the party the first time they arrive (the Guild Hall starts it). \
 Tracks and signposts point to Brinecombe (1 day) and the Salt Stacks (1 day).`,
       inspectables: {
         signpost: "A signpost. 'BRINECOMBE' points down toward the harbor. 'SALT STACKS - ARCHIVE OF SALT - NO UNINVITED MEMORIES' points inland. Someone has scratched out the word 'HOLLOWMERE' behind you, then scratched it back in.",
@@ -196,7 +196,7 @@ Tracks and signposts point to Brinecombe (1 day) and the Salt Stacks (1 day).`,
       },
       encounters: [
         { id: "erased", title: "The Erased", monsters: [ERASED_WANDERER, ERASED_WANDERER, ERASED_WANDERER], gold: 8 },
-        { id: "hounds", title: "Blank Hounds", monsters: [BLANK_HOUND, BLANK_HOUND], loot: [ITEMS.wand] },
+        { id: "hounds", title: "Blank Hounds", onArrival: true, monsters: [BLANK_HOUND, BLANK_HOUND], loot: [ITEMS.wand] },
       ],
       exits: [{ to: "brinecombe", days: 1 }, { to: "salt-stacks", days: 1 }, { to: "hollowmere", days: 1 }],
     },
@@ -271,7 +271,7 @@ recap that sets up Act 2: the Redactor has noticed them.`,
         quill: "A black quill as long as a forearm. The ink on its tip never dries.",
         stair: "Wet stone steps, worn in the middle, going down further than the cliff is tall.",
       },
-      encounters: [{ id: "the-censor", title: "The Censor", finale: true, monsters: [THE_CENSOR, BLANK_ACOLYTE, BLANK_ACOLYTE], loot: [ITEMS.quill], gold: 40 }],
+      encounters: [{ id: "the-censor", title: "The Censor", finale: true, onArrival: true, monsters: [THE_CENSOR, BLANK_ACOLYTE, BLANK_ACOLYTE], loot: [ITEMS.quill], gold: 40 }],
       exits: [],
     },
   },

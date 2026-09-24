@@ -111,6 +111,8 @@ export interface EncounterDef {
   monsters: MonsterDef[];
   /** Winning this encounter completes the act. */
   finale?: boolean;
+  /** Starts on its own when the party arrives (an ambush), rather than waiting for the GM. */
+  onArrival?: boolean;
   loot?: Item[];
   gold?: number;
 }

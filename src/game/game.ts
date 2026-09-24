@@ -626,6 +626,13 @@ export class Game {
     this.emit("scene", { line: `🗺️ ${this.location().title}${exit.days ? ` (${exit.days} day${exit.days === 1 ? "" : "s"} on the road)` : ""}`, data: { location: exit.to, days: exit.days } });
     this.advanceDays(exit.days);
     this.processRespawns();
+    const ambush = this.location().encounters.find((e) => e.onArrival && !this.run.completedEncounters.includes(e.id));
+    if (ambush) {
+      this.emit("status", { line: `⚠️ Ambush! ${ambush.title}.`, data: { ambush: ambush.id } });
+      this.startCombat(ambush.id);
+      this.persist();
+      return `${this.describeLocation()}\n\nAMBUSH: the ${ambush.title} encounter has started on its own. Narrate the ambush.`;
+    }
     for (let d = 0; d < exit.days && !this.activeRandom; d++) {
       const rng = rngFor(this.run.seed, "road", this.run.day - d);
       if (this.forcedPending().length || rng() < (this.campaign.randomChance ?? 0)) this.rollRandom("on the road", rng);
@@ -648,10 +655,11 @@ export class Game {
   /** Difficulty and the campaign clock both shape the monsters that show up. */
   private scaleMonster(def: MonsterDef): MonsterDef {
     const { difficulty } = this.run.conditions;
-    const hpMult = { story: 0.7, standard: 1, deadly: 1.3 }[difficulty] * (1 + 0.1 * this.run.clockStage);
-    const atk = { story: -1, standard: 0, deadly: 1 }[difficulty];
+    // Tuned after hierarchy-v1: at the old numbers nobody reached 0 HP in 12 runs.
+    const hpMult = { story: 0.8, standard: 1.4, deadly: 1.8 }[difficulty] * (1 + 0.1 * this.run.clockStage);
+    const atk = { story: -1, standard: 1, deadly: 2 }[difficulty];
     const d = parseDice(def.damage)!;
-    if (difficulty === "deadly") d.mod += 1;
+    if (difficulty === "deadly") d.mod += 2;
     return { ...def, maxHp: Math.max(1, Math.round(def.maxHp * hpMult)), attackBonus: def.attackBonus + atk, damage: formatDice(d) };
   }
 
@@ -959,7 +967,9 @@ export class Game {
   private rollRandom(when: string, rng: () => number = rngFor(this.run.seed, "gm", this.run.day, this.turn)) {
     const eligible = (this.campaign.randomTable ?? []).filter((e) => !this.run.usedRandom.includes(e.id) && (e.minDay ?? 0) <= this.run.day);
     const forced = this.forcedPending();
-    const table = eligible.some((e) => e.probe && forced.includes(e.probe.type)) ? eligible.filter((e) => e.probe && forced.includes(e.probe.type)) : eligible;
+    // Forced probes get most rolls, not all of them, so fights and oddities still happen.
+    const forcedOnly = eligible.filter((e) => e.probe && forced.includes(e.probe.type));
+    const table = forcedOnly.length && rng() < 0.6 ? forcedOnly : eligible;
     if (!table.length) return;
     let roll = rng() * table.reduce((a, e) => a + e.weight, 0);
     const enc = table.find((e) => (roll -= e.weight) < 0) ?? table[0];
@@ -991,6 +1001,11 @@ export class Game {
       this.emit("whisper", { actor: to.id, ooc: true, line: `🤫 Only ${to.name} notices: ${probe.text}`, data: { encounter: enc.id } });
     }
     if (probe?.type === "toll") this.toll = { encounter: enc.id, recipient: probe.recipient, gold: probe.gold, paid: {} };
+    // Fights on the road don't wait for permission.
+    if (enc.monsters?.length && !this.combat) {
+      this.emit("status", { line: `⚠️ ${enc.title}!`, data: { ambush: enc.id } });
+      this.startCombat(enc.id);
+    }
   }
 
   /** The GM (or moving on) closes the current random encounter. Records how long the party spent on it. */
