@@ -25,7 +25,7 @@ It's a meme, and it's also a small lab for real agent problems. Every joke is a 
 
 | Seat | Race / class | Model |
 |---|---|---|
-| The Game Master | Ancient Elf | Claude Opus 5 |
+| The Game Master | Ancient Elf | Claude Opus 5 (monsters are run by the rules engine) |
 | Thessaly Vane | Elf Wizard | Claude Opus 5 |
 | Cadence Brightwell | Human Bard (signature spell: *You're Absolutely Right!*) | Claude Sonnet 5 |
 | Pell Loophole | Human Rogue (loves a loophole) | Claude Sonnet 5 |
@@ -47,8 +47,31 @@ Keys live in `.env.local`. With `AI_GATEWAY_API_KEY` set, model calls go through
 `ANTHROPIC_API_KEY` is used directly (force that with `LLM_PROVIDER=anthropic`).
 
 Knobs (env vars): `MAX_TURNS` (default 50), `MODEL_OVERRIDE` (put every seat on one model, e.g.
-`claude-haiku-4-5` for cheap runs), `DM_EFFORT` / `PLAYER_EFFORT`, `CONTEXT_BUDGET` (the size of the candle,
-default 60k tokens).
+`claude-haiku-4-5` for cheap runs), `GM_MODEL` (the Game Master only), `DM_EFFORT` / `PLAYER_EFFORT`,
+`CONTEXT_BUDGET` (the size of the candle, default 60k tokens), `GM_COMPACT_AT` (when the GM condenses its
+history into a running log, default 30k tokens), `MONSTER_ACTIONS` (monster attacks per round, default 2).
+
+### Two ways to seat an agent
+
+| `SEATS=` | Seat runs as | Billed to |
+|---|---|---|
+| `api` (default) | An Anthropic SDK tool loop over the Guild Hall's MCP tools | API key or AI Gateway, per token |
+| `code` | Headless Claude Code (`claude -p`), resuming its own session each turn, with the Guild Hall as its only MCP server | Your Claude Pro/Max subscription |
+| `dm,grub` (a list) | Those seats on Claude Code, the rest on the API | Mixed |
+
+Claude Code seats run in a clean directory under `data/sessions/<id>/seats/` with `--setting-sources project`,
+`--tools ""` and `--strict-mcp-config`, so your global CLAUDE.md, hooks, skills and plugins never reach them
+(`--bare` would also isolate them, but it disables subscription login). API keys are stripped from their
+environment so they always use the subscription.
+
+When a subscription usage window runs out, the party makes camp and the session pauses cleanly.
+
+**Rules of the road for subscription seats** (as of 2026-09): headless `claude -p` on your own subscription is a
+documented, supported way to use Claude Code, and nothing in the docs forbids scripting it. Limits are a rolling
+5-hour window plus a weekly cap, shared with your normal Claude usage. The Agent SDK is API-key only for
+subscription purposes. Anthropic doesn't allow third-party products to offer claude.ai login, so keep subscription
+seats for personal runs on your own machine. Before streaming a subscription-powered campaign to the public or
+running it around the clock, re-check Anthropic's current terms, or switch those seats to the API.
 
 Every session is logged to `data/sessions/<id>/events.jsonl`, and each character's spellbook is written out as real
 `SKILL.md` files under `data/sessions/<id>/characters/`. Pick a past session from the dropdown on the page to replay it.
