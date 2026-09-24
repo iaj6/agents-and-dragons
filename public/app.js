@@ -268,7 +268,7 @@ function goLive() {
 async function showIdleIfNoGame() {
   const state = await fetch("/api/state").then((r) => (r.ok ? r.json() : null)).catch(() => null);
   if (state || started) return;
-  const halls = await fetch("/api/halls").then((r) => (r.ok ? r.json() : [])).catch(() => []);
+  const halls = window.fetchHalls ? await window.fetchHalls() : [];
   const playing = halls.filter((h) => h.live && h.snap && !h.snap.ended && h.port !== Number(location.port));
   const latest = (await fetch("/api/sessions").then((r) => r.json()).catch(() => []))[0];
   if (started) return;

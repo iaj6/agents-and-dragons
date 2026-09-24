@@ -214,7 +214,7 @@ npm run judge -- data/sweeps/&lt;sweep&gt;.json                     # score it, 
   <script>
     const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
     (async () => {
-      const halls = await (await fetch("/api/halls")).json().catch(() => []);
+      const halls = await window.fetchHalls();
       const active = halls.filter((h) => h.live && h.snap);
       const el = document.getElementById("live");
       if (!active.length) return void (el.innerHTML = `<p class="quiet">No tables in session. Start one with <code>npm run play</code>, or browse the <a href="/archive.html">archive</a>.</p>`);

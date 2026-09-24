@@ -26,6 +26,13 @@ const sseClients = new Set<Response>();
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
+// Read-only public endpoints may be read by pages served from the other halls on this machine.
+app.use((req, res, next) => {
+  if (req.method === "GET" && req.path.startsWith("/api/") && !["/api/transcript", "/api/run", "/api/character", "/api/table"].includes(req.path)) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
+  next();
+});
 app.use(express.static(path.join(ROOT, "public")));
 
 function auth(req: Request): string | null {

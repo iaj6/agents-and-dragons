@@ -83,7 +83,7 @@
       </div>`;
     }
     async function refresh() {
-      const halls = await (await fetch("/api/halls")).json().catch(() => []);
+      const halls = await window.fetchHalls();
       const up = halls.filter((h) => h.live);
       const down = halls.filter((h) => !h.live).map((h) => `:${h.port}`);
       document.getElementById("grid").innerHTML = up.length ? up.map(card).join("") : `<p class="empty">No Guild Halls found.</p>`;
