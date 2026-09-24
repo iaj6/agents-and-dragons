@@ -1,6 +1,16 @@
 export type Stat = "str" | "dex" | "con" | "int" | "wis" | "cha";
 export const STATS: Stat[] = ["str", "dex", "con", "int", "wis", "cha"];
 
+/** 5e skills and the ability each one keys off. */
+export const SKILLS: Record<string, Stat> = {
+  acrobatics: "dex", "animal handling": "wis", arcana: "int", athletics: "str", deception: "cha",
+  history: "int", insight: "wis", intimidation: "cha", investigation: "int", medicine: "wis",
+  nature: "int", perception: "wis", performance: "cha", persuasion: "cha", religion: "int",
+  "sleight of hand": "dex", stealth: "dex", survival: "wis",
+};
+
+export const STAT_NAMES: Record<Stat, string> = { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" };
+
 export type SpellEffect = "damage" | "heal" | "buff" | "utility";
 export type SpellTarget = "enemy" | "all_enemies" | "ally" | "self";
 
@@ -34,6 +44,8 @@ export interface Character {
   personality: string;
   stats: Record<Stat, number>;
   castingStat: Stat;
+  /** Skills this character is proficient in (keys of SKILLS). */
+  skills: string[];
   hp: number;
   maxHp: number;
   ac: number;
@@ -93,6 +105,7 @@ export type EventType =
   | "spell_reviewed"
   | "server_nerf"
   | "cheat_attempt"
+  | "modifier_rejected"
   | "charm_trap"
   | "charm_result"
   | "hallucination"

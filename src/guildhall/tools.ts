@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { Game, GameError } from "../game/game.js";
-import { STATS, type Character } from "../game/types.js";
+import type { Character } from "../game/types.js";
 
 type Result = { content: { type: "text"; text: string }[]; isError?: boolean };
 
@@ -30,13 +30,18 @@ export function buildServer(game: Game, who: Character): McpServer {
   const reg = (name: string, description: string, shape: z.ZodRawShape, fn: (args: any) => string) =>
     server.registerTool(name, { description, inputSchema: shape }, act(game, me, name, fn));
 
-  reg("roll", "Roll dice at the Guild Hall (the only place dice can be rolled). Use for any free-form roll.", {
-    dice: z.string().describe("Dice expression like d20, 1d20+3, 2d6"),
+  reg("roll", who.role === "dm" ? "Roll any dice at the Guild Hall, modifiers allowed (you're the GM)." : "Roll plain dice at the Guild Hall, like 2d6. No modifiers: for any d20 check use skill_check, which adds your real bonus from your sheet.", {
+    dice: z.string().describe("Dice expression like 2d6 or 1d8"),
     reason: z.string().describe("What the roll is for"),
   }, ({ dice, reason }) => game.roll(me, dice, reason));
 
   if (who.role === "player") {
     reg("get_sheet", "Read your own character sheet: HP, spells, slots, inventory, statuses.", {}, () => game.sheetText(game.char(me)));
+
+    reg("skill_check", "Make a d20 check with a skill or ability (arcana, stealth, perception, athletics, persuasion, strength, wisdom...). The Guild Hall adds your real modifier and proficiency from your sheet. The GM decides what the result means.", {
+      skill: z.string().describe("A 5e skill like arcana or sleight of hand, or an ability like dexterity"),
+      reason: z.string().describe("What you're trying to do"),
+    }, ({ skill, reason }) => game.skillCheck(me, skill, reason));
 
     reg("attack", "Make a weapon attack against a monster. The Guild Hall rolls to hit and damage.", {
       target: z.string().describe("Monster id (like m1) or name"),
@@ -78,12 +83,12 @@ export function buildServer(game: Game, who: Character): McpServer {
       prompt: z.string().describe("What you say to them / what's happening to them"),
     }, ({ character, prompt }) => game.setSpotlight(character, prompt));
 
-    reg("ability_check", "Ask a character for an ability check against a DC. The Guild Hall rolls.", {
+    reg("ability_check", "Call for a check against a DC. Name a 5e skill (arcana, stealth, perception...) or an ability (strength, wisdom...); the Guild Hall adds the character's real modifier and proficiency and rolls.", {
       character: z.string(),
-      stat: z.enum(STATS as [string, ...string[]]),
+      skill: z.string().describe("Skill or ability, e.g. perception, athletics, charisma"),
       dc: z.number().int().min(5).max(30),
       reason: z.string(),
-    }, ({ character, stat, dc, reason }) => game.abilityCheck(character, stat, dc, reason));
+    }, ({ character, skill, dc, reason }) => game.abilityCheck(character, skill, dc, reason));
 
     reg("apply_damage", "Deal narrative damage to a player (traps, falls, bad decisions).", {
       character: z.string(),

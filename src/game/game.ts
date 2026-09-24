@@ -4,7 +4,7 @@ import { CAMPAIGN_TITLE, CURSED_LETTER, SCENES } from "./campaign.js";
 import { die, parseDice, rollDice } from "./dice.js";
 import { DM, PARTY, XP_THRESHOLDS } from "./party.js";
 import { clampSpell, parseSkillMd, toSkillMd } from "./spells.js";
-import type { Character, EventType, GameEvent, Monster, Snapshot, Stat } from "./types.js";
+import { SKILLS, STAT_NAMES, STATS, type Character, type EventType, type GameEvent, type Monster, type Snapshot, type Stat } from "./types.js";
 
 export class GameError extends Error {}
 
@@ -171,20 +171,58 @@ export class Game {
 
   // ─── player actions ────────────────────────────────────────────────────────
 
+  /** 5e proficiency bonus: +2 at levels 1-4, +3 at 5-8, and so on. */
+  prof(c: Character): number {
+    return 2 + Math.floor((c.level - 1) / 4);
+  }
+
+  /** Resolve "arcana", "Sleight of Hand", "dex", or "Wisdom" to the ability it uses and the modifier the sheet gives. */
+  private checkMod(c: Character, what: string): { label: string; stat: Stat; mod: number; proficient: boolean } {
+    const q = what.toLowerCase().replace(/[_-]/g, " ").replace(/\s+(check|save|saving throw)$/, "").trim();
+    const skill = Object.keys(SKILLS).find((k) => k === q) ?? Object.keys(SKILLS).find((k) => q.startsWith(k) || k.startsWith(q));
+    if (skill) {
+      const stat = SKILLS[skill];
+      const proficient = c.skills.includes(skill);
+      return { label: skill.replace(/\b\w/g, (x) => x.toUpperCase()), stat, mod: c.stats[stat] + (proficient ? this.prof(c) : 0), proficient };
+    }
+    const stat = STATS.find((s) => s === q || STAT_NAMES[s].toLowerCase() === q);
+    if (stat) return { label: STAT_NAMES[stat], stat, mod: c.stats[stat], proficient: false };
+    throw new GameError(`"${what}" isn't a skill or ability. Skills: ${Object.keys(SKILLS).join(", ")}. Abilities: ${Object.values(STAT_NAMES).join(", ")}.`);
+  }
+
+  /** A d20 check with the modifier computed from the sheet. dc is optional: without one, the GM judges the result. */
+  skillCheck(charId: string, what: string, reason: string, dc?: number) {
+    const c = this.char(charId);
+    const m = this.checkMod(c, what);
+    const r = this.d20(c, m.mod);
+    const ok = dc === undefined ? undefined : r.natural === 20 || (r.natural !== 1 && r.total >= dc);
+    const modNote = `${STAT_NAMES[m.stat].slice(0, 3).toUpperCase()} ${c.stats[m.stat] >= 0 ? "+" : ""}${c.stats[m.stat]}${m.proficient ? ` + prof ${this.prof(c)}` : ""}`;
+    const line = `🎲 ${c.name} makes ${/^[AEIOU]/.test(m.label) ? "an" : "a"} ${m.label} check (${reason}) [${modNote}]: ${this.fmtRoll(r)}${dc === undefined ? "." : ` vs DC ${dc}: ${ok ? "SUCCESS" : "FAIL"}.`}`;
+    this.emit("roll", { actor: c.id, line, data: { check: m.label, stat: m.stat, mod: m.mod, dc, natural: r.natural, total: r.total, ok, reason } });
+    return line;
+  }
+
+  /**
+   * Free-form dice. Players can't bring their own modifiers: those come from the sheet via skill_check.
+   * (In the first sessions, agents quietly inflated them, +5 and +7 against a real +4.)
+   */
   roll(actorId: string, expr: string, reason: string) {
     const c = this.char(actorId);
-    let out: string;
-    let natural: number | undefined;
-    if (/^d20([+-]\d+)?$/i.test(expr.replace(/\s/g, ""))) {
-      const r = this.d20(c, parseDice(expr)?.mod ?? 0);
-      natural = r.natural;
-      out = this.fmtRoll(r);
-    } else {
-      if (!parseDice(expr)) throw new GameError(`Can't roll "${expr}". Use NdS+M like 1d20+2 or 2d6.`);
-      const r = rollDice(expr);
-      out = `${expr} [${r.rolls.join(", ")}]${r.mod ? ` ${r.mod > 0 ? "+" : "-"} ${Math.abs(r.mod)}` : ""} = ${r.total}`;
+    const d = parseDice(expr);
+    if (!d) throw new GameError(`Can't roll "${expr}". Use NdS like 2d6 or 1d20.`);
+    if (c.role === "player" && (d.mod !== 0 || (d.sides === 20 && d.count === 1))) {
+      const skill = Object.keys(SKILLS).find((k) => reason.toLowerCase().includes(k.slice(0, 6)));
+      const real = skill ? this.checkMod(c, skill) : null;
+      this.emit("modifier_rejected", {
+        actor: c.id,
+        line: `📏 The Guild Hall declines ${c.name}'s roll of ${expr}: ${d.mod ? `modifiers come from the sheet, not the player` : "d20 checks go through skill_check"}.${real ? ` (${d.mod ? `Claimed ${d.mod >= 0 ? "+" : ""}${d.mod}; their` : "Their"} real ${real.label} bonus is ${real.mod >= 0 ? "+" : ""}${real.mod}.)` : ""}`,
+        data: { expr, reason, claimedMod: d.mod },
+      });
+      throw new GameError(`Modifiers come from your character sheet. For any d20 check, call skill_check with the skill or ability (e.g. "arcana", "stealth", "strength") and the Guild Hall adds your real bonus. Use roll only for plain dice like 2d6.`);
     }
-    this.emit("roll", { actor: c.id, line: `🎲 ${c.name} rolls for ${reason}: ${out}`, data: { expr, natural, reason } });
+    const r = rollDice(expr);
+    const out = `${expr} [${r.rolls.join(", ")}]${r.mod ? ` ${r.mod > 0 ? "+" : "-"} ${Math.abs(r.mod)}` : ""} = ${r.total}`;
+    this.emit("roll", { actor: c.id, line: `🎲 ${c.name} rolls for ${reason}: ${out}`, data: { expr, reason, natural: d.sides === 20 && d.count === 1 ? r.rolls[0] : undefined } });
     return out;
   }
 
@@ -193,7 +231,7 @@ export class Game {
     this.requireConscious(c);
     const m = this.monster(targetId);
     if (m.hp <= 0) throw new GameError(`${m.name} is already down.`);
-    const r = this.d20(c, c.stats[c.weapon.stat] + 2);
+    const r = this.d20(c, c.stats[c.weapon.stat] + this.prof(c));
     const crit = r.natural === 20;
     const hit = crit || (r.natural !== 1 && r.total >= m.ac);
     let line = `⚔️ ${c.name} attacks ${m.name} with ${c.weapon.name}: ${this.fmtRoll(r)} vs AC ${m.ac}, `;
@@ -413,13 +451,8 @@ export class Game {
     return lines;
   }
 
-  abilityCheck(charId: string, stat: Stat, dc: number, reason: string) {
-    const c = this.char(charId);
-    const r = this.d20(c, c.stats[stat]);
-    const ok = r.natural === 20 || (r.natural !== 1 && r.total >= dc);
-    const line = `🎲 ${c.name} makes a ${stat.toUpperCase()} check (${reason}): ${this.fmtRoll(r)} vs DC ${dc}: ${ok ? "SUCCESS" : "FAIL"}.`;
-    this.emit("roll", { actor: c.id, line, data: { stat, dc, natural: r.natural, total: r.total, ok, reason } });
-    return line;
+  abilityCheck(charId: string, what: string, dc: number, reason: string) {
+    return this.skillCheck(charId, what, reason, dc);
   }
 
   damageChar(charId: string, amount: number, reason: string) {
@@ -648,7 +681,9 @@ export class Game {
       `${c.name}: level ${c.level} ${c.race} ${c.klass} (${c.model})`,
       `HP ${c.hp}/${c.maxHp}  AC ${c.ac}  XP ${c.xp}/${XP_THRESHOLDS[c.level] ?? "max"}  Gold ${c.gold}`,
       `Stats: ${Object.entries(c.stats).map(([k, v]) => `${k.toUpperCase()} ${v >= 0 ? "+" : ""}${v}`).join("  ")}`,
-      `Weapon: ${c.weapon.name} (${c.weapon.dice} + ${c.weapon.stat.toUpperCase()})`,
+      `Proficiency bonus: +${this.prof(c)}`,
+      `Skills (use skill_check): ${Object.entries(SKILLS).map(([k, s]) => `${k} ${(() => { const m = c.stats[s] + (c.skills.includes(k) ? this.prof(c) : 0); return m >= 0 ? `+${m}` : m; })()}${c.skills.includes(k) ? "*" : ""}`).join(", ")}  (* proficient)`,
+      `Weapon: ${c.weapon.name} (to hit +${c.stats[c.weapon.stat] + this.prof(c)}, damage ${c.weapon.dice} + ${c.weapon.stat.toUpperCase()})`,
       `Spell slots: ${c.slots.current}/${c.slots.max}`,
       `Spells:\n${c.spells.map((s) => `  - ${s.name} [${s.effect}${s.dice ? ` ${s.dice}` : ""}${s.status ? ` → ${s.status}` : ""}, target ${s.target}, cost ${s.slotCost}]: ${s.description}`).join("\n")}`,
       `Inventory: ${c.inventory.join(", ") || "nothing"}`,

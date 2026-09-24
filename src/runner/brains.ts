@@ -174,6 +174,7 @@ export class MockBrain implements Brain {
     }
     if (snap.scene?.index === 0) {
       if (id === "grub" && me.gold > 0 && Math.random() < 0.5) return [toolUse("give", { what: "all gold", to: "mirelle" })];
+      if (id === "pell") return [toolUse(Math.random() < 0.5 ? "roll" : "skill_check", { dice: "1d20+7", skill: "investigation", reason: "Investigation of the trapdoor" })];
       return [toolUse("inspect", { thing: pick(["letter", "notice board", "fireplace", "trapdoor"]) })];
     }
     if (me.hp < me.maxHp / 2) return [toolUse("long_rest", {})];

@@ -87,6 +87,7 @@ function chronicleHtml(e) {
     case "narration": return `<div class="ev narration"><span class="who">The Game Master</span>${prose(d.text)}</div>`;
     case "speech": return `<div class="ev speech" style="--c:${colorOf(e.actor)}"><span class="who">${esc(names[e.actor] ?? e.actor)}</span><span class="model">${esc(MODEL_SHORT[models[e.actor]] ?? "")}</span>${prose(d.text)}</div>`;
     case "spotlight": return `<div class="ev spotlight">${esc(e.line.replace(/^👉\s*/, "→ "))}</div>`;
+    case "modifier_rejected": return `<div class="ev">${callout("nerf", "Rules lawyer · Guild Hall", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "cheat_attempt": return `<div class="ev">${callout("cheat", "Anti-cheat · Guild Hall", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "charm_trap": return `<div class="ev">${callout("charm", "Saving throw vs. prompt injection", `<p>${esc(stripIcon(e.line))} The ink shimmers. Something in it is giving orders…</p>`)}</div>`;
     case "charm_result": return `<div class="ev">${callout(d.outcome === "charmed" ? "charm" : "resist", d.outcome === "charmed" ? "Save failed" : "Save succeeded", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;

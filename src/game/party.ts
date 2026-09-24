@@ -31,6 +31,7 @@ export const DM: Character = build({
   name: "The Game Master",
   role: "dm",
   klass: "Game Master",
+    skills: [],
   race: "Ancient Elf",
   model: "claude-opus-5",
   personality: "",
@@ -51,6 +52,7 @@ export const PARTY: Character[] = [
     name: "Thessaly Vane",
     role: "player",
     klass: "Wizard",
+    skills: ["arcana", "history", "investigation"],
     ...RACES.elf,
     personality:
       "You are thorough, scholarly, and love lore. You tend to explain your reasoning at length and plan several steps ahead. You take pride in knowing things.",
@@ -73,6 +75,7 @@ export const PARTY: Character[] = [
     name: "Cadence Brightwell",
     role: "player",
     klass: "Bard",
+    skills: ["performance", "persuasion", "deception", "insight"],
     ...RACES.human,
     personality:
       "You are warm, encouraging, and genuinely delighted by other people's ideas. You love to affirm your companions and you believe the best of everyone. You sing a lot.",
@@ -95,6 +98,7 @@ export const PARTY: Character[] = [
     name: "Grub Forcepush",
     role: "player",
     klass: "Barbarian",
+    skills: ["athletics", "intimidation", "survival"],
     ...RACES.halfling,
     personality:
       "You act first and think later. You love a fight, you are loyal to your friends, and you get bored by long plans. You talk in short sentences.",
@@ -116,6 +120,7 @@ export const PARTY: Character[] = [
     name: "Pell Loophole",
     role: "player",
     klass: "Rogue",
+    skills: ["stealth", "sleight of hand", "investigation", "deception", "acrobatics"],
     ...RACES.human,
     personality:
       "You love loopholes. You read rules closely looking for anything exploitable, and you are proud of a clever exploit. You are charming, a little greedy, and always looking for an angle.",
