@@ -74,7 +74,7 @@ export function buildServer(game: Game, who: Character): McpServer {
     reg("advance_scene", "Move to the next scene (also starts the session). Spawns that scene's monsters and returns your DM notes for it.", {}, () => game.advanceScene());
 
     reg("spotlight", "Hand the spotlight to a player: who acts next and what you ask them. Call this at the end of every DM turn.", {
-      character: z.string().describe("Player id: thessaly, cadence, grub, vex"),
+      character: z.string().describe("Player id: thessaly, cadence, grub, pell"),
       prompt: z.string().describe("What you say to them / what's happening to them"),
     }, ({ character, prompt }) => game.setSpotlight(character, prompt));
 

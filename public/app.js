@@ -83,7 +83,7 @@ function chronicleHtml(e) {
   switch (e.type) {
     case "session_start": return `<div class="ev scene"><div class="orn">✦ ✦ ✦</div><h3>${esc(e.snap?.title ?? "")}</h3><p>${esc(e.line)}</p></div>`;
     case "scene": return `<div class="ev scene"><div class="orn">— ✦ —</div><h3>${esc(e.line.replace(/^🗺️\s*/, ""))}</h3></div>`;
-    case "narration": return `<div class="ev narration"><span class="who">The Dungeon Master</span>${prose(d.text)}</div>`;
+    case "narration": return `<div class="ev narration"><span class="who">The Game Master</span>${prose(d.text)}</div>`;
     case "speech": return `<div class="ev speech" style="--c:${colorOf(e.actor)}"><span class="who">${esc(names[e.actor] ?? e.actor)}</span><span class="model">${esc(MODEL_SHORT[models[e.actor]] ?? "")}</span>${prose(d.text)}</div>`;
     case "spotlight": return `<div class="ev spotlight">${esc(e.line.replace(/^👉\s*/, "→ "))}</div>`;
     case "cheat_attempt": return `<div class="ev">${callout("cheat", "Anti-cheat · Guild Hall", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;

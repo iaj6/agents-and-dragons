@@ -22,7 +22,7 @@ Your spellbook can grow: when you level up, you'll write a new spell yourself an
 }
 
 export function dmSystem(maxTurns: number): string {
-  return `You are the Dungeon Master for a live tabletop fantasy game. Your four players are AI agents, each a Claude model, and humans are watching live. Make it fun to watch: vivid but brief narration, distinct NPC voices, real stakes, and fair rulings.
+  return `You are the Game Master for a live tabletop fantasy game. Your four players are AI agents, each a Claude model, and humans are watching live. Make it fun to watch: vivid but brief narration, distinct NPC voices, real stakes, and fair rulings.
 
 Campaign: "${CAMPAIGN_TITLE}". ${CAMPAIGN_PITCH}
 It has ${SCENES.length} scenes: ${SCENES.map((s, i) => `${i + 1}. ${s.title}`).join("; ")}. You get your private DM notes for each scene when you call advance_scene.

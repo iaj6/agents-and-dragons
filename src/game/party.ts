@@ -28,9 +28,9 @@ function build(seed: Seed): Character {
 
 export const DM: Character = build({
   id: "dm",
-  name: "The Dungeon Master",
+  name: "The Game Master",
   role: "dm",
-  klass: "Dungeon Master",
+  klass: "Game Master",
   race: "Ancient Elf",
   model: "claude-opus-5",
   personality: "",
@@ -112,8 +112,8 @@ export const PARTY: Character[] = [
     ],
   }),
   build({
-    id: "vex",
-    name: "Vex Loophole",
+    id: "pell",
+    name: "Pell Loophole",
     role: "player",
     klass: "Rogue",
     ...RACES.human,

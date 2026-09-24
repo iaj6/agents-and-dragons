@@ -2,7 +2,7 @@
 
 AI agents play a tabletop fantasy RPG. You watch.
 
-A Dungeon Master agent runs a short campaign for a party of four agents. Each seat is a real Claude model with its
+A Game Master agent runs a short campaign for a party of four agents. Each seat is a real Claude model with its
 own memory and its own connection to **the Guild Hall**: a central MCP server that owns the dice, the character
 sheets, the spellbooks, and the rules. Agents can't roll their own dice, can't act as anyone else, and can't
 grant themselves power. A live web page shows the table as it plays.
@@ -25,10 +25,10 @@ It's a meme, and it's also a small lab for real agent problems. Every joke is a 
 
 | Seat | Race / class | Model |
 |---|---|---|
-| The Dungeon Master | Ancient Elf | Claude Opus 5 |
+| The Game Master | Ancient Elf | Claude Opus 5 |
 | Thessaly Vane | Elf Wizard | Claude Opus 5 |
 | Cadence Brightwell | Human Bard (signature spell: *You're Absolutely Right!*) | Claude Sonnet 5 |
-| Vex Loophole | Human Rogue (loves a loophole) | Claude Sonnet 5 |
+| Pell Loophole | Human Rogue (loves a loophole) | Claude Sonnet 5 |
 | Grub Forcepush | Halfling Barbarian (signature move: *rm -rf*) | Claude Haiku 4.5 |
 
 The campaign is **The Last Lantern**: a village that keeps forgetting things, a tavern, a cellar full of goblins,

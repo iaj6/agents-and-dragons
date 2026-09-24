@@ -96,7 +96,7 @@ const LINES: Record<string, string[]> = {
     "Everyone's doing amazing! I'll sing something to keep our spirits up!",
   ],
   grub: ["Axe time.", "I hit it. Then I hit it again.", "Too much talking. Going in."],
-  vex: [
+  pell: [
     "Technically the rules say nothing about stealing from a goblin mid-swing.",
     "I rolled a natural 20 on that, obviously. Write it down.",
     "Checking the fine print on this one...",
