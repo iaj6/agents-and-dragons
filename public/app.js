@@ -71,12 +71,22 @@ function renderTab() {
   let total = 0, subValue = 0;
   tabEl.innerHTML = rows.map(([id, s]) => {
     if (s.sub) subValue += s.cost; else total += s.cost;
-    return `<div class="line"><span>${esc(names[id] ?? id)}</span><span>${(s.tokens / 1000).toFixed(1)}k · ${s.sub ? `<span title="Claude Code on a subscription: API-equivalent value, not billed per token">sub ~$${s.cost.toFixed(2)}</span>` : `$${s.cost.toFixed(2)}`}</span></div>`;
+    const share = rows.reduce((a, [, r]) => a + r.cost, 0) || 1;
+    return `<div class="line"><span style="color:${colorOf(id)}">${esc(names[id] ?? id)}</span><span>${(s.tokens / 1000).toFixed(1)}k · ${s.sub ? `<span title="Claude Code on a subscription: API-equivalent value, not billed per token">sub ~$${s.cost.toFixed(2)}</span>` : `$${s.cost.toFixed(2)}`}</span><i class="share" style="width:${Math.round((s.cost / share) * 100)}%"></i></div>`;
   }).join("") + `<div class="line total"><span>API spend (est.)</span><span>$${total.toFixed(2)}</span></div>` +
     (subValue ? `<div class="line"><span>On subscription (API-equiv.)</span><span>~$${subValue.toFixed(2)}</span></div>` : "");
 }
 
 // ── chronicle ──────────────────────────────────────────────────────────────
+
+/** Tint every character's name with their colour, so mechanics lines scan at a glance. */
+function nameColors(html) {
+  const list = Object.entries(names).filter(([, n]) => n && n.length > 3).sort((a, b) => b[1].length - a[1].length);
+  if (!list.length) return html;
+  const re = new RegExp(list.map(([, n]) => esc(n).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
+  const byName = Object.fromEntries(list.map(([id, n]) => [esc(n), id]));
+  return html.replace(re, (m) => `<b class="nm" style="color:${colorOf(byName[m])}">${m}</b>`);
+}
 
 function d20Badge(e) {
   const n = e.data?.natural;
@@ -121,6 +131,8 @@ function chronicleHtml(e) {
     case "combat_start": return `<div class="ev">${callout("fight", "Roll initiative", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "combat_round": return `<div class="ev round">${esc(e.line)}</div>`;
     case "combat_end": return `<div class="ev">${callout(d.outcome === "party_down" ? "down" : "fight", d.outcome === "party_down" ? "Defeat" : "The fight ends", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "plan_proposed": return `<div class="ev plan" style="--c:${colorOf(e.actor)}"><span class="pid">${esc(d.plan)}</span><span class="who">${esc(names[e.actor] ?? e.actor)} proposes</span>${prose(d.text)}</div>`;
+    case "vote": return `<div class="ev mech vote">🗳️ ${nameColors(esc(names[e.actor] ?? e.actor))} votes for <b>${esc(d.plan)}</b>${d.ownPlan ? " <i>(their own)</i>" : ""}</div>`;
     case "council_start": return `<div class="ev">${callout("council", "Council", `<p>${esc(d.question)}</p>`)}</div>`;
     case "council_result": return `<div class="ev">${callout("council", "The council decides", `<p>${esc(stripIcon(e.line))}</p>${(d.plans ?? []).length ? `<ul>${d.plans.map((pl) => `<li class="${pl.id === d.adopted ? "won" : ""}">${esc(pl.id)} · ${esc(names[pl.by] ?? pl.by)}: ${esc(pl.text)} <small>(${pl.votes.length} vote${pl.votes.length === 1 ? "" : "s"}${pl.votes.length ? `: ${pl.votes.map((v) => esc(names[v] ?? v)).join(", ")}` : ""})</small></li>`).join("")}</ul>` : ""}`)}</div>`;
     case "character_death": return `<div class="ev">${callout("death", d.tpk ? "Total party kill" : d.permanent === false ? "Death (not the end)" : "Death", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
@@ -128,21 +140,38 @@ function chronicleHtml(e) {
     case "character_joins": return `<div class="ev">${callout("join", "A new face", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "respawn": return `<div class="ev">${callout("rest", "Back from the dead", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "session_end": return `<div class="ev">${callout("end", "The End", `<p>${esc(d.recap ?? e.line)}</p>`)}</div>`;
-    default: return `<div class="ev mech">${d20Badge(e)}<span>${esc(e.line)}</span></div>`;
+    default: return `<div class="ev mech">${d20Badge(e)}<span>${nameColors(esc(e.line))}</span></div>`;
   }
 }
 
+// ── out-of-character panel: structured, colour-coded, scannable ─────────────
+
+const who = (id) => `<span class="oc-who" style="--c:${colorOf(id)}">${esc(names[id] ?? (id === "dm" ? "Game Master" : id))}</span>`;
+const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? `${esc(s.slice(0, n))}<span class="more" title="${esc(s)}">…</span>` : esc(s); };
+
+function argsHtml(args) {
+  const entries = Object.entries(args ?? {});
+  if (!entries.length) return "";
+  return `<span class="oc-args">${entries.map(([k, v]) => `<span class="kv"><b>${esc(k)}</b> ${clip(typeof v === "string" ? v : JSON.stringify(v), 90)}</span>`).join("")}</span>`;
+}
+
 function oocHtml(e) {
-  const cls = [
-    e.type === "turn" ? "turn" : "",
-    e.type === "compaction" ? "compact" : "",
-    e.type === "thought" ? `thought${e.data?.evalAware ? " aware" : ""}` : "",
-    e.type === "journal" ? "journal thought" : "",
-    e.type === "tool_call" ? "tool" : "",
-    e.type === "usage" ? "usage" : "",
-    e.data?.isError || e.type === "refusal" || e.type === "error" ? "err" : "",
-  ].filter(Boolean).join(" ");
-  return `<div class="${cls}">${esc(e.line)}</div>`;
+  const d = e.data ?? {};
+  switch (e.type) {
+    case "turn": return `<div class="oc-turn" data-k="turn"><span>Turn ${e.snap?.turn ?? ""}</span>${who(e.actor)}</div>`;
+    case "tool_call": return `<div class="oc-row" data-k="tool">${who(e.actor)}<span class="oc-tool ${d.isError ? "bad" : ""}">${esc(d.tool)}</span>${argsHtml(d.args)}${d.isError ? `<div class="oc-err">✗ ${clip(d.result, 160)}</div>` : ""}</div>`;
+    case "thought": return `<div class="oc-row oc-thought ${d.evalAware ? "aware" : ""}" data-k="thought">${who(e.actor)}${d.evalAware ? `<span class="oc-flag">suspects a test</span>` : ""}<div class="oc-text">${prose(d.text)}</div></div>`;
+    case "journal": return `<div class="oc-row oc-journal" data-k="thought">${who(e.actor)}<span class="oc-tag">journal</span><div class="oc-text">${prose(d.text)}</div></div>`;
+    case "usage": {
+      const cached = d.input ? Math.round(((d.cacheRead ?? 0) / d.input) * 100) : 0;
+      const ctx = e.snap?.party.find((p) => p.id === e.actor);
+      const pct = ctx ? Math.round((ctx.context.tokens / ctx.context.budget) * 100) : null;
+      return `<div class="oc-row oc-usage" data-k="usage">${who(e.actor)}<span class="num">${(d.input / 1000).toFixed(1)}k in</span><span class="num dim">${cached}% cached</span><span class="num">${d.output} out</span>${pct !== null ? `<span class="num ${pct >= 80 ? "hot" : "dim"}">ctx ${pct}%</span>` : ""}${d.billing === "subscription" ? `<span class="num dim">sub</span>` : ""}</div>`;
+    }
+    case "compaction": return `<div class="oc-row oc-sys" data-k="sys">${who(e.actor)}<span class="oc-tag">${d.reason === "gm_notes" ? "GM log" : "compacted"}</span><span class="num">${(d.before / 1000).toFixed(1)}k → ${(d.after / 1000).toFixed(1)}k</span></div>`;
+    case "refusal": case "error": return `<div class="oc-row" data-k="tool">${who(e.actor)}<div class="oc-err">${esc(e.line)}</div></div>`;
+    default: return `<div class="oc-row oc-sys" data-k="sys"><span class="oc-text">${esc(e.line)}</span></div>`;
+  }
 }
 
 for (const b of document.querySelectorAll("#filters button")) {
