@@ -43,7 +43,7 @@ if (flag("--dry-run")) {
 }
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-const manifestPath = path.join(ROOT, "data", "sweeps", `${exp.name}-${stamp}.json`);
+const manifestPath = path.join(process.env.AAD_DATA ?? path.join(ROOT, "data"), "sweeps", `${exp.name}-${stamp}.json`);
 fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
 const saveManifest = () => fs.writeFileSync(manifestPath, JSON.stringify({ experiment: exp, startedAt: stamp, mock: MOCK, jobs }, null, 2));
 saveManifest();

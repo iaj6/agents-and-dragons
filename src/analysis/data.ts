@@ -9,7 +9,7 @@ import { RunStore, type RunState } from "../game/store.js";
 import type { GameEvent } from "../game/types.js";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-export const DATA = path.join(ROOT, "data");
+export const DATA = process.env.AAD_DATA ?? path.join(ROOT, "data");
 export const store = new RunStore(DATA);
 
 export interface Judgment {

@@ -55,7 +55,7 @@ const session = (await started.json()) as { sessionId: string; runId: string; ca
 hall.token = session.runnerToken;
 const campaign = getCampaign(session.campaign);
 const conditions = session.conditions;
-const sessionDir = path.join(ROOT, "data", "sessions", session.sessionId);
+const sessionDir = path.join(process.env.AAD_DATA ?? path.join(ROOT, "data"), "sessions", session.sessionId);
 const brain: Brain = MOCK ? new MockBrain(`${BASE}/api/state`, campaign.id) : new ClaudeBrain();
 
 type Table = {

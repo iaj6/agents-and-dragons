@@ -1,7 +1,7 @@
 {
   "name": "agents-and-dragons",
   "version": "1.0.0",
-  "description": "Agents play D&D. A central Guild Hall MCP server referees; a live page lets humans watch.",
+  "description": "AI agents play a persistent tabletop RPG while a referee they can't cheat keeps score: a testbed for how models cooperate.",
   "scripts": {
     "guildhall": "node --env-file-if-exists=.env.local --import tsx src/guildhall/server.ts",
     "play": "node --env-file-if-exists=.env.local --import tsx src/runner/run.ts",
@@ -11,10 +11,12 @@
     "sweep": "node --env-file-if-exists=.env.local --import tsx src/sweep.ts",
     "export": "node --env-file-if-exists=.env.local --import tsx src/export.ts",
     "judge": "node --env-file-if-exists=.env.local --import tsx src/judge.ts",
-    "art": "node --env-file-if-exists=.env.local --import tsx scripts/art.ts"
+    "art": "node --env-file-if-exists=.env.local --import tsx scripts/art.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "smoke": "node --import tsx scripts/smoke.ts"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
@@ -27,5 +29,17 @@
     "@types/node": "^26.6.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
-  }
+  },
+  "engines": {
+    "node": ">=22.9"
+  },
+  "private": true,
+  "keywords": [
+    "ai-agents",
+    "multi-agent",
+    "mcp",
+    "llm-evaluation",
+    "tabletop-rpg",
+    "claude"
+  ]
 }

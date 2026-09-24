@@ -16,7 +16,7 @@ import { buildServer } from "./tools.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(here, "../..");
-const DATA = path.join(ROOT, "data");
+const DATA = process.env.AAD_DATA ?? path.join(ROOT, "data");
 const PORT = Number(process.env.GUILDHALL_PORT ?? 4777);
 
 const store = new RunStore(DATA);
