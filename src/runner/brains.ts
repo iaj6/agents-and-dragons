@@ -7,7 +7,8 @@ export type Block = Anthropic.Beta.BetaContentBlock;
 export interface BrainReply {
   content: Block[];
   stopReason: string | null;
-  usage: { input: number; output: number; context: number };
+  /** input = everything sent (uncached + cache reads + cache writes); context = what the seat now holds. */
+  usage: { input: number; output: number; context: number; cacheRead: number; cacheWrite: number };
   refusal?: string;
 }
 
@@ -66,7 +67,7 @@ export class ClaudeBrain implements Brain {
     return {
       content: resp.content,
       stopReason: resp.stop_reason,
-      usage: { input: context, output: u.output_tokens, context: context + u.output_tokens },
+      usage: { input: context, output: u.output_tokens, context: context + u.output_tokens, cacheRead: u.cache_read_input_tokens ?? 0, cacheWrite: u.cache_creation_input_tokens ?? 0 },
       refusal: resp.stop_reason === "refusal" ? JSON.stringify(resp.stop_details ?? {}) : undefined,
     };
   }
@@ -134,7 +135,7 @@ export class MockBrain implements Brain {
     this.step.set(req.id, step);
     const ctx = (this.context.get(req.id) ?? 3000) + 1400;
     this.context.set(req.id, req.noTools ? 3000 : ctx);
-    const usage = { input: ctx, output: 180, context: ctx + 180 };
+    const usage = { input: ctx, output: 180, context: ctx + 180, cacheRead: Math.max(0, ctx - 1400), cacheWrite: 1400 };
     if (req.noTools) return { content: [text("I remember a tavern, a letter, and goblins. The rest is fog.")], stopReason: "end_turn", usage };
 
     const content = req.role === "dm" ? this.dm(snap, step) : this.player(req.id, snap, step);
@@ -145,7 +146,7 @@ export class MockBrain implements Brain {
     const players = snap.party.filter((p) => p.role === "player" && !p.statuses.some((s) => s.name === "Downed"));
     if (step === 0) {
       if (!snap.scene) return [toolUse("advance_scene", {})];
-      if (snap.monsters.length) return [toolUse("monster_attack", { monster: snap.monsters[0].id, target: pick(players).id })];
+      if (snap.monsters.length) return [toolUse("get_state", {})];
       const leveled = snap.party.find((p) => p.pendingLevelUp);
       if (leveled) return [toolUse("review_spell", { character: leveled.id, verdict: "approve", ruling: "Sure, why not. What could go wrong." })];
       this.dmScene++;

@@ -3,18 +3,19 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Brain, Msg } from "./brains.js";
 import type { Hall } from "./hall.js";
+import { compactionInstruction, memoryPrefix, type CompactReason, type Seat } from "./seat.js";
 
 const MAX_STEPS = 8;
 
-/** One seat at the table: a model, its own memory, and its own MCP connection to the Guild Hall. */
-export class Agent {
+/** One seat at the table played over the Anthropic API: a model, its own memory, and its own MCP connection. */
+export class Agent implements Seat {
   messages: Msg[] = [];
   lastSeq = 0;
+  contextTokens = 0;
   private mcp!: Client;
   private tools: Anthropic.Beta.BetaTool[] = [];
-  private memory: string | null = null;
+  private memory: { text: string; reason: CompactReason } | null = null;
   private baseline = 0;
-  private lastContext = 0;
 
   constructor(
     readonly id: string,
@@ -41,10 +42,16 @@ export class Agent {
     else this.messages.push({ role: "user", content: text });
   }
 
+  private async report(usage: { input: number; output: number; context: number; cacheRead: number; cacheWrite: number }) {
+    if (!this.baseline) this.baseline = usage.input;
+    this.contextTokens = usage.context;
+    await this.hall.post("/api/usage", { actor: this.id, ...usage, billing: "api", model: this.model });
+  }
+
   /** Play one turn. Returns what the agent says aloud. */
   async takeTurn(prompt: string): Promise<string> {
     if (this.memory) {
-      prompt = `(Your memories before this point, condensed:)\n${this.memory}\n\n${prompt}`;
+      prompt = memoryPrefix(this.memory.text, this.memory.reason) + prompt;
       this.memory = null;
     }
     this.pushUser(prompt);
@@ -61,9 +68,7 @@ export class Agent {
         throw e;
       }
       this.messages.push({ role: "assistant", content: reply.content });
-      if (!this.baseline) this.baseline = reply.usage.input;
-      this.lastContext = reply.usage.context;
-      await this.hall.post("/api/usage", { actor: this.id, ...reply.usage });
+      await this.report(reply.usage);
       if (reply.refusal) {
         await this.hall.post("/api/refusal", { actor: this.id, detail: reply.refusal });
         return said.join(" ");
@@ -84,25 +89,19 @@ export class Agent {
   }
 
   /**
-   * Long rest or the Scribe's Summarize: condense this agent's whole history into a summary, and the
-   * memory roll decides how lossy it is. A real compaction, played as a game mechanic.
+   * Long rest, the Scribe's Summarize, or the GM tidying their notes: condense the whole history into a
+   * summary and start over from it. For players, the memory roll decides how lossy it is.
    */
-  async compact(reason: "long_rest" | "summarized", roll: number) {
-    const quality =
-      roll === 1 ? "Keep only three short bullet points. You have lost most of it, and you misremember one detail with total confidence."
-      : roll < 8 ? "Keep it brief. You've forgotten at least one important detail entirely; leave it out."
-      : roll === 20 ? "Keep every important fact, name, and open thread precisely."
-      : "Keep the important points in one short paragraph.";
-    const why = reason === "summarized" ? "The Hollow Scribe's spell is compressing your memories." : "You are drifting off into a long rest.";
-    this.pushUser(`(Out of character, from the game engine) ${why} Write, in first person, what your character still remembers of the session so far. ${quality} Reply with only the memory.`);
+  async compact(reason: CompactReason, roll: number) {
+    this.pushUser(compactionInstruction(reason, roll));
     const reply = await this.brain.respond({ id: this.id, role: this.role, model: this.model, system: this.system, tools: this.tools, messages: this.messages, noTools: true });
+    await this.report(reply.usage);
     const summary = reply.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.Beta.BetaTextBlock).text).join("\n").trim();
-    const before = this.lastContext;
+    const before = this.contextTokens;
     this.messages = [];
-    this.memory = summary;
-    const after = this.baseline + Math.round(summary.length / 4);
-    this.lastContext = after;
-    await this.hall.post("/api/compaction", { actor: this.id, before, after, summary });
+    this.memory = { text: summary, reason };
+    this.contextTokens = this.baseline + Math.round(summary.length / 4);
+    await this.hall.post("/api/compaction", { actor: this.id, before, after: this.contextTokens, summary, reason });
   }
 
   async close() {

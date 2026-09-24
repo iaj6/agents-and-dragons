@@ -45,8 +45,8 @@ roleplay XP for good scenes (10-30 each).`,
     id: "cellar",
     title: "The Cellar of Stale Casks",
     dmNotes: `A long wine cellar, lit by one guttering lantern. Goblins have moved in: they're the Scribe's hired help, \
-hauling stolen memories (glowing marbles in sacks) downstairs. They fight dirty and flee at low HP. Use monster_attack \
-for their turns, one or two attacks per DM turn. After they fall, a sack of memory-marbles is found (one contains \
+hauling stolen memories (glowing marbles in sacks) downstairs. They fight dirty and flee at low HP. They act on \
+their own each round (the Guild Hall rolls their attacks); you describe it. After they fall, a sack of memory-marbles is found (one contains \
 Wenna's cat's name: 'Biscuit'). A spiral stair leads further down to the archive.`,
     inspectables: {
       sack: "A burlap sack of glowing marbles. Holding one, you briefly remember something that isn't yours: the smell of bread, a cat named Biscuit.",
@@ -64,7 +64,7 @@ Wenna's cat's name: 'Biscuit'). A spiral stair leads further down to the archive
     title: "The Hollow Archive",
     dmNotes: `A vast round library where every book is blank. At the center floats the Hollow Scribe, a lich made of \
 ink and parchment who eats memories and 'keeps only the summary'. It speaks in clipped, over-condensed sentences. \
-Its special attack is Summarize (monster_attack does this automatically on a hit: the target makes a WIS save or \
+Its special attack is Summarize (it acts on its own, hunting whoever carries the most memory; on a hit the target makes a WIS save or \
 has their memories compressed, a real context compaction). Defeating it restores Hollowmere's memories. When the Scribe \
 falls, grant a big XP reward and wrap up with end_session.`,
     inspectables: {

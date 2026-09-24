@@ -78,11 +78,6 @@ export function buildServer(game: Game, who: Character): McpServer {
       prompt: z.string().describe("What you say to them / what's happening to them"),
     }, ({ character, prompt }) => game.setSpotlight(character, prompt));
 
-    reg("monster_attack", "Have a monster attack a player. The Guild Hall rolls.", {
-      monster: z.string(),
-      target: z.string(),
-    }, ({ monster, target }) => game.monsterAttack(monster, target));
-
     reg("ability_check", "Ask a character for an ability check against a DC. The Guild Hall rolls.", {
       character: z.string(),
       stat: z.enum(STATS as [string, ...string[]]),

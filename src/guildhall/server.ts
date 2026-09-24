@@ -93,11 +93,16 @@ app.post("/api/usage", runnerOnly, (req, res) => {
   res.json({ ok: true });
 });
 app.post("/api/compaction", runnerOnly, (req, res) => {
-  game!.reportCompaction(req.body.actor, req.body.before, req.body.after, req.body.summary);
+  game!.reportCompaction(req.body.actor, req.body.before, req.body.after, req.body.summary, req.body.reason);
   res.json({ ok: true });
 });
 app.post("/api/refusal", runnerOnly, (req, res) => {
   game!.reportRefusal(req.body.actor, req.body.detail);
+  res.json({ ok: true });
+});
+app.post("/api/monsters-act", runnerOnly, (req, res) => res.json({ lines: game!.monstersAct(Number(req.body.max ?? 2)) }));
+app.post("/api/usage-limit", runnerOnly, (req, res) => {
+  game!.emit("status", { line: `⛺ The party makes camp: the gods of the subscription have run out of patience for now (${String(req.body.detail ?? "").slice(0, 120)}). The session pauses here.`, data: { detail: req.body.detail } });
   res.json({ ok: true });
 });
 app.post("/api/ratelimit", runnerOnly, (req, res) => {

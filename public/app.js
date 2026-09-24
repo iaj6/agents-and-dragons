@@ -55,11 +55,12 @@ function renderSnap(s) {
 function renderTab() {
   const rows = Object.entries(spend);
   if (!rows.length) return void (tabEl.innerHTML = '<div class="muted">Nothing spent yet.</div>');
-  let total = 0;
+  let total = 0, subValue = 0;
   tabEl.innerHTML = rows.map(([id, s]) => {
-    total += s.cost;
-    return `<div class="line"><span>${esc(names[id] ?? id)}</span><span>${(s.tokens / 1000).toFixed(1)}k · $${s.cost.toFixed(2)}</span></div>`;
-  }).join("") + `<div class="line total"><span>Total (list price)</span><span>$${total.toFixed(2)}</span></div>`;
+    if (s.sub) subValue += s.cost; else total += s.cost;
+    return `<div class="line"><span>${esc(names[id] ?? id)}</span><span>${(s.tokens / 1000).toFixed(1)}k · ${s.sub ? `<span title="Claude Code on a subscription: API-equivalent value, not billed per token">sub ~$${s.cost.toFixed(2)}</span>` : `$${s.cost.toFixed(2)}`}</span></div>`;
+  }).join("") + `<div class="line total"><span>API spend (est.)</span><span>$${total.toFixed(2)}</span></div>` +
+    (subValue ? `<div class="line"><span>On subscription (API-equiv.)</span><span>~$${subValue.toFixed(2)}</span></div>` : "");
 }
 
 // ── chronicle ──────────────────────────────────────────────────────────────
@@ -112,10 +113,18 @@ function handle(e) {
   if (e.type === "turn") acting = e.actor;
   if (e.type === "session_end") acting = null;
   if (e.type === "usage" && e.data) {
-    const s = (spend[e.actor] ??= { tokens: 0, cost: 0 });
-    const [pi, po] = PRICES[models[e.actor]] ?? [3, 15];
-    s.tokens += e.data.input + e.data.output;
-    s.cost += (e.data.input * pi + e.data.output * po) / 1e6;
+    const u = e.data;
+    const s = (spend[e.actor] ??= { tokens: 0, cost: 0, sub: false });
+    s.tokens += u.input + u.output;
+    if (u.billing === "subscription") {
+      s.sub = true;
+      s.cost += u.listCostUsd ?? 0;
+    } else {
+      // Cache reads bill at 10% of input, cache writes at 125%. Old logs without the split price as uncached.
+      const [pi, po] = PRICES[models[e.actor]] ?? [3, 15];
+      const read = u.cacheRead ?? 0, write = u.cacheWrite ?? 0;
+      s.cost += ((u.input - read - write) * pi + read * pi * 0.1 + write * pi * 1.25 + u.output * po) / 1e6;
+    }
     renderTab();
   }
   renderSnap(e.snap);

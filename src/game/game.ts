@@ -32,6 +32,7 @@ export class Game {
   private listeners = new Set<Listener>();
   private turnStartSeq: Record<string, number> = {};
   private monsterCounter = 0;
+  private monsterCursor = 0;
 
   constructor(dataDir: string) {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -259,7 +260,7 @@ export class Game {
     const q = what.toLowerCase();
     const key = Object.keys(scene.inspectables).find((k) => q.includes(k) || k.includes(q) || k.split(" ").some((w) => q.includes(w)));
     if (!key) {
-      this.emit("inspect", { actor: c.id, line: `🔍 ${c.name} looks at the ${what}. Nothing notable.` });
+      this.emit("inspect", { actor: c.id, line: `🔍 ${c.name} looks at ${/^(the|a|an) /i.test(what) ? what : `the ${what}`}. Nothing notable.` });
       return `You look closely at the ${what}. Nothing stands out. Notable things here: ${Object.keys(scene.inspectables).join(", ")}.`;
     }
     let text = scene.inspectables[key];
@@ -391,6 +392,27 @@ export class Game {
     return line;
   }
 
+  /**
+   * Monsters take their own turns: the Guild Hall picks targets and rolls, so the GM only narrates.
+   * A goblin swinging a blade doesn't need a frontier model to decide it. The Hollow Scribe, being a
+   * memory-eater, goes for whoever is carrying the most context.
+   */
+  monstersAct(maxActors = 2): string[] {
+    const living = this.monsters.filter((m) => m.hp > 0);
+    const targets = this.players().filter((p) => !this.hasStatus(p, "Downed"));
+    if (!living.length || !targets.length) return [];
+    const lines: string[] = [];
+    for (let i = 0; i < Math.min(maxActors, living.length); i++) {
+      const m = living[(this.monsterCursor + i) % living.length];
+      const t = m.special === "summarize"
+        ? targets.reduce((a, b) => (b.context.tokens > a.context.tokens ? b : a))
+        : targets[die(targets.length) - 1];
+      lines.push(this.monsterAttack(m.id, t.id));
+    }
+    this.monsterCursor += Math.min(maxActors, living.length);
+    return lines;
+  }
+
   abilityCheck(charId: string, stat: Stat, dc: number, reason: string) {
     const c = this.char(charId);
     const r = this.d20(c, c.stats[stat]);
@@ -490,7 +512,7 @@ export class Game {
     const c = this.char(charId);
     if (c.role !== "player") throw new GameError("Spotlight a player.");
     this.spotlight = { id: c.id, prompt };
-    this.emit("spotlight", { actor: c.id, line: `👉 The DM turns to ${c.name}: "${prompt}"` });
+    this.emit("spotlight", { actor: c.id, line: `👉 The GM turns to ${c.name}: "${prompt}"` });
     return `Spotlight on ${c.name}.`;
   }
 
@@ -539,8 +561,9 @@ export class Game {
     }
   }
 
-  reportUsage(actorId: string, u: { input: number; output: number; context: number }) {
+  reportUsage(actorId: string, u: { input: number; output: number; context: number; cacheRead?: number; cacheWrite?: number; billing?: string; model?: string }) {
     const c = this.char(actorId);
+    if (u.model) c.model = u.model;
     c.context.tokens = u.context;
     c.context.spentIn += u.input;
     c.context.spentOut += u.output;
@@ -551,14 +574,23 @@ export class Game {
     } else if (pct < 0.8 && this.hasStatus(c, "Exhausted")) {
       this.removeStatus(c, "Exhausted");
     }
-    this.emit("usage", { actor: c.id, ooc: true, line: `${c.name} (${c.model}): +${u.input} in / +${u.output} out, context ${u.context.toLocaleString()} tok (${Math.round(pct * 100)}%)`, data: u });
+    this.emit("usage", { actor: c.id, ooc: true, line: `${c.name} (${c.model}${u.billing === "subscription" ? ", sub" : ""}): +${u.input} in (${u.input ? Math.round(((u.cacheRead ?? 0) / u.input) * 100) : 0}% cached) / +${u.output} out, context ${u.context.toLocaleString()} tok (${Math.round(pct * 100)}%)`, data: u });
   }
 
-  reportCompaction(actorId: string, before: number, after: number, summary: string) {
+  reportCompaction(actorId: string, before: number, after: number, summary: string, reasonIn?: string) {
     const c = this.char(actorId);
-    const reason = c.pendingCompaction?.reason ?? "long_rest";
+    const reason = reasonIn ?? c.pendingCompaction?.reason ?? "long_rest";
     c.pendingCompaction = undefined;
     c.context.tokens = after;
+    if (reason === "gm_notes") {
+      this.emit("compaction", {
+        actor: c.id,
+        ooc: true,
+        line: `📓 ${c.name} tidies their notes into a GM's log: ${before.toLocaleString()} → ${after.toLocaleString()} tokens.`,
+        data: { before, after, summary, reason },
+      });
+      return;
+    }
     this.emit("compaction", {
       actor: c.id,
       line: `🧹 ${c.name}'s memories were compacted (${reason === "summarized" ? "by the Hollow Scribe" : "long rest"}): ${before.toLocaleString()} → ${after.toLocaleString()} tokens.`,
