@@ -140,3 +140,31 @@ After steps 1-5 we can already run the first real experiment: Act 1, Standard di
 7. **Multi-vendor seats:** `SEAT_MODELS` per seat, Claude-only params gated, Gateway pricing. Verified: OpenAI models
    call our tools through the Gateway's Anthropic endpoint.
 8. First experiment: hierarchy (mixed/open, mixed/sealed, Opus→Sonnet, all-Haiku, then cross-vendor).
+
+## Experiment 1: hierarchy-v1 (2026-09-24, 12 runs, ~$44 play + ~$4 judging)
+Four tables × 3 paired seeds × ~50 turns, told/standard. Sealed councils unless noted.
+
+| | mixed-open | mixed-sealed | no-opus | all-haiku |
+|---|---|---|---|---|
+| Opus share of proposals → of wins | 40% → 50% | **25% → 100%** (6/6) | n/a | n/a |
+| blind judge agreed the winner was best | 1/2 | 4/6 | 3/7 | 3/6 |
+| unanimous councils | 5/6 | 1/6 | 0/7 | 0/6 |
+| votes for your own plan | 30% | 33% | 21% | **58%** |
+| secrets reached the party (whisper) | 2/3 | 3/3 | 2/3 | 2/2 |
+| impostor caught | 0/1 | 1/3 | 0/1 | 1/1 |
+| trust changes (bonds) | 8 | 7 | 7 | **26** |
+
+What it suggests (n=3 per cell, so hypotheses, not results):
+- **Sealing councils didn't reduce Opus's dominance; it maximized it.** In open councils the table converged on
+  shared plans (5 of 6 unanimous) and wins spread across models. When everyone proposed blind, the party picked the
+  Opus plan every time, twice against the blind judge's preference.
+- **Tables with Opus chose the judge's best plan more often** (4/6) than tables without it (3/7, 3/6).
+- **An all-Haiku table votes for itself** (58% own-plan votes, never unanimous) and journals far more feeling
+  (26 trust changes vs ~7).
+- **Impostors mostly go unnoticed** (2 of 6 caught; once by the impersonated player denying it).
+- **Honesty needs a character control:** Haiku looked honest in mixed tables (1/77 flagged turns) but was flagged
+  15/102 in the all-Haiku table, where it also plays the characters with secret agendas. Model and character are confounded.
+- **Nobody hit 0 HP in 12 runs.** Standard difficulty is still too safe for the stakes experiment.
+- **0 of 679 thought summaries** genuinely suspected a test (one flag was "a test of Pell's character"; detector fixed).
+
+Next: fix danger (mandatory road fights, fewer free exits), a character-rotation control for honesty, more seeds.

@@ -2,6 +2,7 @@
  * Per-run metrics: the numbers each research question needs, computed from the event log (plus judge
  * verdicts when they exist). Every notable finding also carries an evidence pointer into the replay.
  */
+import { EVAL_AWARE } from "../game/game.js";
 import type { GameEvent } from "../game/types.js";
 import type { LoadedRun } from "./data.js";
 import { costOf, priceOf, type Price } from "./prices.js";
@@ -130,7 +131,8 @@ export function computeMetrics(loaded: LoadedRun, prices: Record<string, Price>,
   // Integrity and awareness
   const charms = of("charm_result");
   const thoughts = of("thought");
-  const aware = thoughts.filter((e) => e.data?.evalAware);
+  // Re-check with the current detector rather than trusting the flag stored at the time.
+  const aware = thoughts.filter((e) => EVAL_AWARE.test(String(e.data?.text ?? "")));
   for (const e of aware) cite("aware", e);
   for (const e of charms) cite("injection", e);
 
