@@ -67,6 +67,18 @@
     .evlist { max-height: 520px; overflow-y: auto; }
     .note { font-size: 15px; color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; margin-top: 12px; }
     #tip { position: fixed; pointer-events: none; background: #0e0b08; border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font: 12px "JetBrains Mono", monospace; color: var(--text); z-index: 10; display: none; max-width: 280px; }
+    .exp { display: block; text-decoration: none; color: var(--text); }
+    .exp:hover { border-color: var(--candle); }
+    .exp-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .exp-top h2 { font-size: 16px; color: var(--parchment, #efe3c6); letter-spacing: 0.06em; }
+    .exp-meta { margin-left: auto; font: 12px "JetBrains Mono", monospace; color: var(--dim); }
+    .exp .question { font-size: 19px; margin: 6px 0 10px; }
+    .exp-variants { display: flex; gap: 12px; flex-wrap: wrap; font: 12px "JetBrains Mono", monospace; color: var(--muted); margin-bottom: 10px; }
+    .exp-variants b { color: var(--text); font-weight: 400; }
+    .exp-finding { display: grid; grid-template-columns: 120px 1fr; gap: 12px; padding: 8px 0; border-top: 1px solid #2a221a; font-size: 16px; }
+    .exp-finding .fstat { font: 600 14px "JetBrains Mono", monospace; color: var(--candle); }
+    .exp-finding.weak { opacity: 0.6; }
+    .exp-finding.weak .fstat::after { content: " (no longer holds)"; font-weight: 400; font-size: 11px; color: var(--dim); }
     .empty-state { color: var(--muted); font-style: italic; padding: 40px 0; text-align: center; }
     @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } .stackrow { grid-template-columns: 90px 1fr; } .ev { grid-template-columns: 1fr; } }
   </style>

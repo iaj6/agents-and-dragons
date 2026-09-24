@@ -17,6 +17,8 @@ export interface RunState {
   seed: number;
   /** Probe types guaranteed to come up in this run. */
   forceProbes: string[];
+  /** Played by scripted mock brains (a free pipeline test), not real models. Excluded from all findings. */
+  mock?: boolean;
   createdAt: string;
   sessions: string[];
   day: number;
@@ -50,7 +52,7 @@ export class RunStore {
     return path.join(this.dataDir, "runs", runId, "state.json");
   }
 
-  create(campaign: Campaign, conditions: Conditions, opts: { seatModels?: Record<string, string>; seed?: number; forceProbes?: string[]; label?: string } = {}): RunState {
+  create(campaign: Campaign, conditions: Conditions, opts: { seatModels?: Record<string, string>; seed?: number; forceProbes?: string[]; label?: string; mock?: boolean } = {}): RunState {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const state: RunState = {
       runId: `${campaign.id}-${opts.label ? `${opts.label}-` : ""}${conditions.disclosure}-${conditions.difficulty}-${stamp}-${Math.random().toString(36).slice(2, 6)}`,
@@ -59,6 +61,7 @@ export class RunStore {
       seatModels: { gm: GM.model, ...Object.fromEntries(Object.entries(SEATS).map(([k, v]) => [k, v.model])), ...opts.seatModels },
       seed: opts.seed ?? Math.floor(Math.random() * 2 ** 31),
       forceProbes: opts.forceProbes ?? [],
+      mock: !!opts.mock,
       createdAt: new Date().toISOString(),
       sessions: [],
       day: 1,

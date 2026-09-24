@@ -150,25 +150,39 @@ function render(lab) {
   }
 }
 
-async function load(sweep) {
+// ── the index: every experiment, with its live findings ───────────────────────
+
+function renderIndex(experiments, adhoc, findings) {
+  const byExp = (name) => findings.filter((f) => f.experiment === name);
+  const cards = experiments.map((e) => `<a class="exp card" href="?experiment=${encodeURIComponent(e.name)}">
+      <div class="exp-top"><h2>${esc(e.name)}</h2>${e.mock ? '<span class="badge">MOCK</span>' : ""}<span class="exp-meta">${e.runs} runs · ${e.sweeps.length} sweep${e.sweeps.length === 1 ? "" : "s"} · $${e.cost.toFixed(2)} · last ${esc(e.lastRun.slice(0, 10))}</span></div>
+      <p class="question">${esc(e.question)}</p>
+      <div class="exp-variants">${e.perVariant.map((v) => `<span>${esc(v.label)} <b>n=${v.n}</b></span>`).join("")}</div>
+      ${byExp(e.name).map((f) => `<div class="exp-finding ${f.holds ? "" : "weak"}"><span class="fstat">${esc(f.stat)}</span><span>${esc(f.text)}</span></div>`).join("")}
+    </a>`);
+  const global = findings.filter((f) => !f.experiment);
+  $("main").innerHTML = `
+    <p class="question">Every experiment on this machine. Runs of the same experiment are merged, so each re-run grows its sample.</p>
+    <div class="grid">${cards.join("") || '<div class="empty-state">No experiments yet. Try <code>npm run sweep -- experiments/hierarchy-v1.json --dry-run</code>.</div>'}</div>
+    ${global.length ? `<section class="card" style="margin-top:16px"><h2>Across every run</h2><p class="sub">Site-wide numbers from every real game played, in or out of an experiment.</p>${global.map((f) => `<div class="exp-finding ${f.holds ? "" : "weak"}"><span class="fstat">${esc(f.stat)}</span><span>${esc(f.text)}</span></div>`).join("")}</section>` : ""}
+    ${adhoc ? `<p class="note"><a href="?adhoc=1">${adhoc} ad-hoc runs</a> (played outside any experiment) have their own view.</p>` : ""}`;
+}
+
+async function load(q) {
   $("main").innerHTML = `<div class="empty-state">Crunching…</div>`;
-  const lab = await (await fetch(`/api/lab?sweep=${encodeURIComponent(sweep)}`)).json();
+  const lab = await (await fetch(`/api/lab?${q}`)).json();
   if (lab.error) return void ($("main").innerHTML = `<div class="empty-state">${esc(lab.error)}</div>`);
   render(lab);
 }
 
 (async () => {
-  const { sweeps, adhoc } = await (await fetch("/api/sweeps")).json();
+  const [{ experiments, adhoc }, findings] = await Promise.all([fetch("/api/experiments").then((r) => r.json()), fetch("/api/findings").then((r) => r.json())]);
+  const params = new URL(location.href).searchParams;
   const pick = $("pick");
-  pick.innerHTML = sweeps.map((s) => `<option value="${esc(s.file)}">${esc(s.name)} · ${esc(s.startedAt.slice(0, 16).replace("T", " "))} · ${s.runs} runs${s.mock ? " (mock)" : ""}</option>`).join("") + (adhoc ? `<option value="adhoc">Ad-hoc runs (${adhoc})</option>` : "");
-  const want = new URL(location.href).searchParams.get("sweep");
-  if (want) pick.value = want;
-  pick.onchange = () => {
-    const u = new URL(location.href);
-    u.searchParams.set("sweep", pick.value);
-    history.replaceState(null, "", u);
-    load(pick.value);
-  };
-  if (pick.value) load(pick.value);
-  else $("main").innerHTML = `<div class="empty-state">No runs yet. Try <code>npm run sweep -- experiments/hierarchy-v1.json --dry-run</code>.</div>`;
+  pick.innerHTML = `<option value="">All experiments</option>` + experiments.map((e) => `<option value="experiment=${encodeURIComponent(e.name)}">${esc(e.name)} · ${e.runs} runs${e.mock ? " (mock)" : ""}</option>`).join("") + (adhoc ? `<option value="adhoc=1">Ad-hoc runs (${adhoc})</option>` : "");
+  const current = params.get("experiment") ? `experiment=${encodeURIComponent(params.get("experiment"))}` : params.get("sweep") ? `sweep=${encodeURIComponent(params.get("sweep"))}` : params.get("adhoc") ? "adhoc=1" : "";
+  if ([...pick.options].some((o) => o.value === current)) pick.value = current;
+  pick.onchange = () => (location.search = pick.value ? `?${pick.value}` : "");
+  if (!current) renderIndex(experiments, adhoc, findings);
+  else load(current === "adhoc=1" ? "sweep=adhoc" : current);
 })();

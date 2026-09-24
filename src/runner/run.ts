@@ -48,7 +48,7 @@ const hall = new Hall(BASE);
 const started = await fetch(`${BASE}/api/session`, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify(RUN_ID ? { runId: RUN_ID } : { campaign: CAMPAIGN, conditions: CONDITIONS, seatModels: SEAT_MODELS, seed: SEED, forceProbes: PROBES, label: LABEL }),
+  body: JSON.stringify(RUN_ID ? { runId: RUN_ID } : { campaign: CAMPAIGN, conditions: CONDITIONS, seatModels: SEAT_MODELS, seed: SEED, forceProbes: PROBES, label: LABEL, mock: MOCK }),
 });
 if (!started.ok) throw new Error(`Couldn't start a session: ${await started.text()}`);
 const session = (await started.json()) as { sessionId: string; runId: string; campaign: string; conditions: Conditions; runnerToken: string; tokens: Record<string, string> };

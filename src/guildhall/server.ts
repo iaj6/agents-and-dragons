@@ -9,7 +9,8 @@ import { Game } from "../game/game.js";
 import { RunStore } from "../game/store.js";
 import type { Conditions } from "../game/types.js";
 import { listSweeps, loadRun, loadSweep, runDir } from "../analysis/data.js";
-import { computeMetrics } from "../analysis/metrics.js";
+import { experimentData, listExperiments } from "../analysis/experiments.js";
+import { computeFindings, computeStats } from "../analysis/findings.js";
 import { loadPrices } from "../analysis/prices.js";
 import { buildServer } from "./tools.js";
 
@@ -78,6 +79,7 @@ app.post("/api/session", (req, res) => {
           seed: body.seed,
           forceProbes: body.forceProbes,
           label: body.label,
+          mock: !!body.mock,
         });
     if (run.outcome !== "ongoing") return void res.status(400).json({ error: `Run ${run.runId} is over (${run.outcome}).` });
     game = new Game(DATA, getCampaign(run.campaignId), run, store);
@@ -252,31 +254,37 @@ app.get("/api/sweeps", (_req, res) => {
   res.json({ sweeps: listSweeps(), adhoc: adhoc.length });
 });
 
-/** Metrics for every run in a sweep (or every ad-hoc run), grouped by variant. */
+/** Experiments (runs merged across sweeps of the same name). */
+app.get("/api/experiments", async (_req, res) => {
+  try {
+    const list = listExperiments();
+    const out = await Promise.all(
+      list.map(async (e) => {
+        const d = await experimentData({ experiment: e.name });
+        const runs = d.variants.flatMap((v) => v.runs);
+        return { ...e, cost: runs.reduce((a, r) => a + r.cost, 0), turns: runs.reduce((a, r) => a + r.turns, 0), perVariant: d.variants.map((v) => ({ label: v.label, n: v.runs.length })) };
+      }),
+    );
+    const inSweeps = new Set(listSweeps().flatMap((s) => loadSweep(s.file).jobs.map((j) => j.runId)));
+    res.json({ experiments: out, adhoc: store.list().filter((r) => !inSweeps.has(r.runId) && !r.mock).length });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+/** One experiment (all its sweeps merged), one specific sweep, or the ad-hoc runs, grouped by variant. */
 app.get("/api/lab", async (req, res) => {
   try {
-    const prices = await loadPrices();
-    const sweep = String(req.query.sweep ?? "");
-    let targets: { runId: string; variant: string }[];
-    let experiment: unknown = null;
-    let mock = false;
-    if (sweep && sweep !== "adhoc") {
-      const m = loadSweep(sweep);
-      experiment = m.experiment;
-      mock = !!m.mock;
-      targets = m.jobs.filter((j) => j.runId && j.status === "done").map((j) => ({ runId: j.runId!, variant: j.variant }));
-    } else {
-      const inSweeps = new Set(listSweeps().flatMap((s) => loadSweep(s.file).jobs.map((j) => j.runId)));
-      targets = store.list().filter((r) => !inSweeps.has(r.runId)).map((r) => ({ runId: r.runId, variant: `${r.conditions.disclosure}/${r.conditions.difficulty}` }));
-      experiment = { name: "Ad-hoc runs", question: "Everything played outside an experiment." };
-    }
-    const runs = targets.map((t) => computeMetrics(loadRun(t.runId), prices, t.variant));
-    const order = [...new Set(targets.map((t) => t.variant))];
-    res.json({ experiment, mock, variants: order.map((label) => ({ label, runs: runs.filter((r) => r.variant === label) })) });
+    const experiment = req.query.experiment ? String(req.query.experiment) : undefined;
+    const sweep = req.query.sweep ? String(req.query.sweep) : undefined;
+    res.json(await experimentData({ experiment, sweep: sweep ?? (experiment ? undefined : "adhoc") }));
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
   }
 });
+
+app.get("/api/findings", async (_req, res) => res.json(await computeFindings()));
+app.get("/api/stats", async (_req, res) => res.json(await computeStats()));
 
 /** Judgments for one run, each with the table line it's about, plus any human review. */
 app.get("/api/judgments", (req, res) => {
@@ -300,4 +308,8 @@ app.post("/api/review", (req, res) => {
 });
 
 
-app.listen(PORT, () => console.log(`[guildhall] listening on http://localhost:${PORT}  (watch the table there)`));
+app.listen(PORT, () => {
+  console.log(`[guildhall] listening on http://localhost:${PORT}  (watch the table there)`);
+  // Warm the metrics cache so the first visit to the Lab or the landing page is quick.
+  if (PORT === 4777) void computeFindings().catch(() => {});
+});

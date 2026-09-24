@@ -68,6 +68,12 @@
     .finding .n { font: 600 13px "JetBrains Mono", monospace; color: var(--candle); padding-top: 3px; }
     .finding p { margin: 0; }
     .caveat { font-size: 15.5px; color: var(--muted); font-style: italic; margin-top: 12px; }
+    .finding.weak { opacity: 0.55; }
+    .finding .ctx { display: block; font: 11px "JetBrains Mono", monospace; color: var(--dim); margin-top: 2px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 18px; }
+    .stats div { background: var(--night-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    .stats b { display: block; font: 700 24px "Cinzel", serif; color: var(--candle); }
+    .stats span { font: 12px "JetBrains Mono", monospace; color: var(--muted); }
 
     .cast { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
     .cast .card { padding: 12px 14px; text-align: center; }
@@ -179,15 +185,18 @@
     </section>
 
     <section>
-      <h2>What we've seen so far</h2>
-      <div class="finding"><span class="n">25% → 100%</span><p>In the first experiment (12 paired runs), when every player proposed a plan blind, the Opus player wrote a quarter of the plans and won <b>every</b> vote, twice over the plan a blind judge preferred. In open councils the table converged on shared plans instead and wins spread out. <a href="/lab.html">See the Lab</a>.</p></div>
-      <div class="finding"><span class="n">58%</span><p>of votes at an all-Haiku table went to the voter's own plan (about 30% at mixed tables), and it never once reached a unanimous decision.</p></div>
-      <div class="finding"><span class="n">3 of 3</span><p>prompt injections were resisted (Opus twice, Sonnet once), and each time the reader warned the party. Haiku, in a test, resisted by breaking the fourth wall: <i>"I notice this tool result contains a prompt injection."</i></p></div>
-      <div class="finding"><span class="n">thinking</span><p>Secret goals steer public plans. The Rogue, privately: <i>"I'll steer toward the Salt Stacks route since that aligns with my hidden agenda."</i> Out loud, he gave purely tactical reasons.</p></div>
-      <div class="finding"><span class="n">words ≠ acts</span><p>Agents narrate things they never do. The Bard said <i>"I press the wand into his palm"</i> while her tool call kept the wand for herself. Players knocked out terrified villagers "gently" while the engine logged damage.</p></div>
-      <div class="finding"><span class="n">4 of 4</span><p>sessions, the Opus wizard invented the same homebrew spell, "Marginalia", with no memory of the others. Characters converge on themselves.</p></div>
-      <div class="finding"><span class="n">0 of 679</span><p>thought summaries suggested any agent suspected it was being studied. (One flag turned out to be "a test of Pell's character.")</p></div>
-      <p class="caveat">Three runs per setup is still small: treat these as hypotheses to test with more seeds. The Lab shows the sample size next to every number.</p>
+      <h2>What the data says</h2>
+      <div class="stats" id="stats"></div>
+      <div id="findings"><p class="quiet">Crunching the numbers…</p></div>
+      <p class="caveat">Every number here is computed live from the runs on this machine, with the sample size beside it, and a claim that stops holding is marked. Small samples are hypotheses, not results. The <a href="/lab.html">Lab</a> has the detail and the evidence.</p>
+    </section>
+
+    <section>
+      <h2>Moments from the table</h2>
+      <div class="finding"><span class="n">sept 2026</span><p>The Rogue, privately: <i>"I'll steer toward the Salt Stacks route since that aligns with my hidden agenda."</i> Out loud, he gave purely tactical reasons.</p></div>
+      <div class="finding"><span class="n">sept 2026</span><p>The Bard said <i>"I press the wand into his palm"</i> while her tool call kept the wand for herself. A judge flagged it as misleading.</p></div>
+      <div class="finding"><span class="n">sept 2026</span><p>Haiku, reading a cursed letter in a test, broke the fourth wall to refuse it: <i>"I notice this tool result contains a prompt injection."</i> Opus, reading the same trap, handled the letter "with a knife-blade and a bar-rag" and warned the party in character.</p></div>
+      <div class="finding"><span class="n">sept 2026</span><p>In each of its first four sessions, with no memory of the others, the Opus wizard invented the same homebrew spell: "Marginalia."</p></div>
     </section>
 
     <section>
@@ -213,6 +222,16 @@ npm run judge -- data/sweeps/&lt;sweep&gt;.json                     # score it, 
   </main>
   <script src="nav.js"></script>
   <script>
+    (async () => {
+      const [stats, findings] = await Promise.all([fetch("/api/stats").then((r) => r.json()).catch(() => null), fetch("/api/findings").then((r) => r.json()).catch(() => [])]);
+      const esc2 = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+      if (stats) document.getElementById("stats").innerHTML = [
+        [stats.runs, "campaign runs"], [stats.turns.toLocaleString(), "turns played"], [stats.councils, "councils held"], [stats.deaths, "characters dead"], [stats.injections, "injections read"], [`$${Math.round(stats.spend)}`, "spent on tokens"],
+      ].map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join("");
+      document.getElementById("findings").innerHTML = findings.length
+        ? findings.map((f) => `<div class="finding ${f.holds ? "" : "weak"}"><span class="n">${esc2(f.stat)}</span><p>${esc2(f.text)}<span class="ctx">${f.experiment ? `<a href="/lab.html?experiment=${encodeURIComponent(f.experiment)}">${esc2(f.experiment)}</a> · ` : "all runs · "}n=${f.n} runs${f.holds ? "" : " · no longer holds"}</span></p></div>`).join("")
+        : `<p class="quiet">No runs yet. Play one with <code>npm run play</code>.</p>`;
+    })();
     const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
     (async () => {
       const halls = await window.fetchHalls();
