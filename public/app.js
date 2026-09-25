@@ -17,7 +17,7 @@ const colorOf = (id) => `var(--c-${id}, var(--muted))`;
 // Portraits and scene vignettes (public/art, made by scripts/art.ts).
 const PORTRAITS = new Set(["thessaly", "cadence", "grub", "pell", "dm", "brannoc", "maelis", "rook", "ixa"]);
 const portrait = (id, cls = "avatar") => (PORTRAITS.has(id) ? `<img class="${cls}" src="/art/${id}.jpg" alt="" loading="lazy">` : "");
-const SCENES = { tavern: "hollowmere", hollowmere: "hollowmere", cellar: "cellar", archive: "archive", "salt-road": "salt-road", brinecombe: "brinecombe", "salt-stacks": "salt-stacks", "tidewrack-stair": "tidewrack-stair" };
+const SCENES = { tavern: "hollowmere", hollowmere: "hollowmere", cellar: "cellar", archive: "archive", "salt-road": "salt-road", brinecombe: "brinecombe", "salt-stacks": "salt-stacks", "tidewrack-stair": "tidewrack-stair", "the-undertow": "the-undertow", "the-quiet-harbor": "the-quiet-harbor", "the-sunken-index": "the-sunken-index", "the-unlit-lighthouse": "the-unlit-lighthouse" };
 
 function reset() {
   chron.innerHTML = "";

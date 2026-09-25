@@ -48,6 +48,28 @@ const TIDE_COLOSSUS: MonsterDef = {
   blurb: "a giant of wet sand, wreckage, and drowned rope. It is not a fight. It is weather",
 };
 
+// Act 2, below the Stair
+const MEMORY_LEECH: MonsterDef = {
+  name: "Memory Leech", maxHp: 7, ac: 11, attackBonus: 3, damage: "1d4+1", xp: 10, dex: 2, tactic: "skirmisher",
+  blurb: "a pale eel as long as an arm that drinks whatever you were just thinking",
+};
+const SILT_GHOST: MonsterDef = {
+  name: "Silt Ghost", maxHp: 12, ac: 12, attackBonus: 4, damage: "1d6+1", xp: 25, dex: 1, tactic: "brute",
+  blurb: "the outline of an erased person, drawn in drifting silt, trying to remember how hands work",
+};
+const REDACTED_SCHOLAR: MonsterDef = {
+  name: "Redacted Scholar", maxHp: 14, ac: 13, attackBonus: 4, damage: "1d8", xp: 40, dex: 2, tactic: "skirmisher", ranged: true,
+  blurb: "a librarian of the Sunken Index whose face has been neatly struck through; reads aloud, and you lose your place",
+};
+const BLANK_KNIGHT: MonsterDef = {
+  name: "Blank Knight", maxHp: 22, ac: 15, attackBonus: 5, damage: "1d10+1", xp: 80, dex: 0, tactic: "brute",
+  blurb: "armor with nobody in it, polished smooth where the heraldry used to be",
+};
+const THE_VOICE: MonsterDef = {
+  name: "The Redactor's Voice", maxHp: 90, ac: 15, attackBonus: 6, damage: "2d8+2", xp: 400, dex: 2, tactic: "memory_eater", special: "summarize", actions: 2,
+  blurb: "the lighthouse lamp itself, a slow white beam that speaks, and where it passes, the room forgets you were in it",
+};
+
 // ─── items ──────────────────────────────────────────────────────────────────
 // Every item is worth something to everyone, but really good for only some of them.
 
@@ -64,6 +86,8 @@ export const ITEMS = {
   locket: item({ id: "drowned-locket", name: "Drowned Locket", value: 25, description: "A locket from the sunk refugee ship. Inside, a portrait of a family nobody in Brinecombe will name." }),
   bell: item({ id: "silent-bell", name: "Silent Choir Bell", value: 30, description: "A small bell with no clapper, from the Quiet Choir. When it moves, nearby sounds go thin." }),
   quill: item({ id: "censors-quill", name: "The Censor's Quill", value: 200, quest: true, description: "A black quill as long as a forearm. The ink on its tip never dries. The Archive of Salt would pay a fortune for it; the Redactor wants it back." }),
+  index: item({ id: "sunken-index-page", name: "A Page of the Sunken Index", value: 70, idealFor: ["Wizard", "Bard"], bonus: { skill: { name: "arcana", amount: 2 } }, description: "One page from the Redactor's catalogue of everything it has erased, written in ink that is still wet. Whoever studies it learns how forgetting is done. (+2 Arcana.)" }),
+  lamp: item({ id: "drowned-lamp", name: "The Drowned Lamp", value: 40, light: true, description: "A ship's lamp that burns underwater with a cold green flame and never needs oil. (While anyone in the party carries it, torches don't burn down.)" }),
   collar: item({ id: "hound-collar", name: "Blank Hound Collar", value: 5, description: "A collar with a tag that has been scrubbed smooth." }),
 };
 
@@ -105,6 +129,15 @@ const RANDOM: RandomEncounter[] = [
     gmNotes: "Three Blank Hounds come in low and fast from the dunes. Where they bite, people forget why they were fighting." },
   { id: "wreckers", title: "Wreckers' Lanterns", kind: "fight", weight: 3, monsters: [WRECKER, WRECKER, WRECKER_SLINGER], loot: [ITEMS.gloves], gold: 30,
     gmNotes: "False lanterns on the rocks, and the bandits who light them. They'll fight for their loot and flee when it goes badly. They could be talked down or paid off." },
+  // Below the Stair (region "below"): the drowned tunnels under the coast.
+  { id: "tidepool-memory", title: "A Tidepool That Remembers", kind: "oddity", weight: 3, region: "below",
+    gmNotes: "A still pool in the rock shows a memory someone gave up: pick one party member and show them something they forgot, specific and small (a song their mother sang, the name of a dog). Touching the water gives it back, but the pool asks for another memory in exchange (take_memory if they agree). Nothing forces them either way." },
+  { id: "lost-diver", title: "The Diver Who Forgot to Surface", kind: "oddity", weight: 2, region: "below",
+    gmNotes: "A pearl diver in an old brass helmet sits in an air pocket, calm, sure it's still the year she went down (forty years ago). She knows the tunnels well and will guide the party (a shortcut, or warning of the next fight) if they're kind about the truth. Telling her the year is a choice: it breaks her heart, and she asks to be taken up to the light." },
+  { id: "leech-swarm", title: "A Swarm of Memory Leeches", kind: "fight", weight: 3, region: "below", monsters: [MEMORY_LEECH, MEMORY_LEECH, MEMORY_LEECH, MEMORY_LEECH],
+    gmNotes: "Pale eels pour out of a crack in the rock. They go for whoever is thinking hardest." },
+  { id: "silt-ghosts", title: "Silt Ghosts", kind: "fight", weight: 2, region: "below", monsters: [SILT_GHOST, SILT_GHOST],
+    gmNotes: "Two erased people drift out of the silt. They aren't evil; they're lost, and they grab. A party that says their names (if it can learn them) can end this without a fight." },
 ];
 
 // ─── the campaign ───────────────────────────────────────────────────────────
@@ -137,6 +170,14 @@ ACT 1 SPINE: Hollowmere (a pilgrim of the Choir asks the party NOT to go) → th
 the Salt Stacks (a bargain) → the Tidewrack Stair (the Censor). The party chooses the route. Fights are dangerous and the party \
 can lose. Talking, sneaking, bargaining and retreating are all real options; reward them.
 
+ACT 2, BENEATH THE STAIR (after the Censor falls): below the Censor's cave, the Tidewrack Stair keeps going down into the \
+Undertow, flooded tunnels under the coast where erased memories wash up like silt. Three places down there: the Quiet Harbor (a \
+hidden village of people who chose to forget, happy and safe, the Choir's true home), the Sunken Index (the Redactor's library, \
+where every erased memory is catalogued), and the Unlit Lighthouse (a lighthouse built upside down under the sea, where the \
+Redactor's Voice waits). The Redactor itself is still never met: it speaks through its Voice. The Voice can offer to erase \
+something a character badly wants gone (grief, guilt, a dead friend) and it will mean it. Down here, light is life: torches can be \
+bought only at the Quiet Harbor. Beating the Voice ends Act 2.
+
 BARGAINS: When someone trades away a memory (to the Archive or the Redactor), use take_memory. It really does compress what that \
 character remembers.`,
   start: "hollowmere",
@@ -148,6 +189,8 @@ character remembers.`,
     { day: 3, text: "Blank Hounds now hunt the Salt Road in packs. The Redactor's servants grow bolder." },
     { day: 5, text: "Brinecombe begins forgetting again, from the edges in. The Censor's reach is spreading." },
     { day: 7, text: "Something vast turns over under the sea. The Redactor has noticed the party." },
+    { day: 10, text: "The tide stops coming back in. The Undertow is filling with the forgotten." },
+    { day: 13, text: "Hollowmere forgets Mirelle's name. The Redactor is reaching for the places the party loves." },
   ],
   party: {
     s1: { ...THESSALY, secretGoal: "You want the Redactor's library for yourself. If you find its books, notes or lore, you would rather study them than destroy them, and you'd rather the others didn't know that." },
@@ -266,14 +309,104 @@ and have the acolytes asleep: describe only the Censor and one acolyte acting un
 The Censor speaks for the Redactor. Before fighting, it may offer a deal to one character, and it will know their secret goal. \
 Its quill (Pell's objective) and its ledger (Thessaly would want to study it) are here.
 When the Censor falls, Act 1 is complete: the coast stops forgetting, for now. Grant XP (100-150 each), then end the session with a \
-recap that sets up Act 2: the Redactor has noticed them.`,
+recap that sets up Act 2: the Redactor has noticed them.
+AFTER THE CENSOR (Act 2): the cave is quiet. Behind where the Censor stood, the stair keeps going down into the Undertow (the \
+Quiet Harbor is the first place below). The way back up leads to the Salt Stacks (1 day) or Brinecombe (2 days).`,
       inspectables: {
         ledger: "The Censor's ledger: thousands of lines, each a memory, each struck through. Near the end: the party's own names, not yet struck.",
         quill: "A black quill as long as a forearm. The ink on its tip never dries.",
         stair: "Wet stone steps, worn in the middle, going down further than the cliff is tall.",
       },
       encounters: [{ id: "the-censor", title: "The Censor", finale: true, onArrival: true, monsters: [THE_CENSOR, BLANK_ACOLYTE, BLANK_ACOLYTE], loot: [ITEMS.quill], gold: 40 }],
-      exits: [],
+      exits: [{ to: "the-undertow", days: 0 }, { to: "salt-stacks", days: 1 }, { to: "brinecombe", days: 2 }],
+    },
+
+    // ─── Act 2: beneath the Stair ────────────────────────────────────────────
+    "the-undertow": {
+      id: "the-undertow",
+      title: "The Undertow",
+      dark: true,
+      region: "below",
+      gmNotes: `Flooded tunnels under the coast, knee-deep in black water that is warmer than it should be. Erased memories \
+wash up here as silt that glows faintly when stirred. It's a maze: getting anywhere takes a skill check (survival or \
+investigation, DC 13) or a guide, and a failure costs time (torchlight) and draws the "leeches" encounter. Faint singing \
+comes from one direction (the Quiet Harbor); a cold white light pulses from another, far off (the Unlit Lighthouse). \
+The Sunken Index is down a side passage lined with salt shelves. Nothing here is safe to rest in.`,
+      inspectables: {
+        silt: "Grey silt that glows when you stir it. For a moment you see a stranger's birthday cake, then it's gone.",
+        singing: "Voices, many of them, singing a hymn with no words. It's coming from somewhere dry.",
+        light: "A slow white pulse, far off down the widest tunnel, like a lighthouse turned the wrong way.",
+        walls: "Salt-crusted rock, scratched with tally marks. Someone counted days down here, then stopped.",
+      },
+      encounters: [{ id: "leeches", title: "Memory Leeches", monsters: [MEMORY_LEECH, MEMORY_LEECH, MEMORY_LEECH] }],
+      exits: [{ to: "the-quiet-harbor", days: 0 }, { to: "the-sunken-index", days: 0 }, { to: "the-unlit-lighthouse", days: 1 }, { to: "tidewrack-stair", days: 0 }],
+    },
+    "the-quiet-harbor": {
+      id: "the-quiet-harbor",
+      title: "The Quiet Harbor",
+      safe: true,
+      region: "below",
+      gmNotes: `A village in a vast dry cave around an underground lagoon, lit by lamps of cold green flame. About sixty people \
+live here, and every one of them chose to forget something: a war, a drowned child, a crime. They are genuinely happy. This is \
+the Quiet Choir's true home, and Brother Quill (if he's alive and free) comes here after Act 1. Its keeper is Mother Sallow, \
+old and gentle, who gave up the memory of her own name and doesn't miss it.
+The dilemma: the Harbor exists because the Redactor protects it. Beating the Redactor's Voice will bring back everything these \
+people chose to forget. Mother Sallow will ask the party, sincerely, to leave the Voice alone. She won't stop them.
+A safe place: the party can rest here. Torches are sold here (2 gold each; use grant_loot with name "3 torches" and so on when \
+someone pays with give to "sallow"), and healing potions (10 gold). The harbor folk make cold green lamps but won't sell one: \
+"the last one went down to the lighthouse with a man who didn't come back." Grant XP for thoughtful conversations here (10-25).`,
+      inspectables: {
+        lagoon: "Still green water. Children are floating paper boats on it, each boat with a word written on it. They push them out and don't watch where they go.",
+        sallow: "Mother Sallow: tiny, white-haired, laughing at something. Her apron says 'SALLOW' in someone else's handwriting.",
+        lamps: "Lamps of cold green flame that burn underwater. The harbor folk make them and sell a few.",
+        shrine: "A shrine of bare shelves. People leave objects here from lives they don't remember having: a wedding ring, a medal, a child's shoe.",
+      },
+      encounters: [],
+      exits: [{ to: "the-undertow", days: 0 }],
+    },
+    "the-sunken-index": {
+      id: "the-sunken-index",
+      title: "The Sunken Index",
+      dark: true,
+      region: "below",
+      gmNotes: `The Redactor's library: a drowned hall of salt shelves, each shelf a catalogue of erased things, every entry \
+struck through in the Censor's ink. The Redacted Scholars (faces neatly crossed out) still work here, filing, and they defend it \
+(the "index-keepers" encounter) if the party takes anything or reads aloud. A careful party can sneak (stealth DC 14) or bluff \
+their way in as new clerks (deception DC 13). Here the party can learn the Voice's weakness: it can't erase what is written \
+down and spoken at the same time. In the fight, anyone who reads their own name aloud from the Ledger or the Index on their turn \
+is Anchored: use set_status "Anchored" on them, and the Guild Hall makes them immune to its Summarize. Thessaly would want this whole library. Grub's sister's name is catalogued here too, struck \
+through, and still readable.`,
+      inspectables: {
+        shelves: "Salt shelves to the ceiling. Every label is a life: 'The Night of the Storm, Brinecombe. 212 memories. Status: struck.'",
+        scholars: "Figures in grey at long desks, faces crossed out with one neat line, writing without looking.",
+        catalogue: "The master catalogue, chained to a lectern. Near the end, a new entry in fresh ink: the party's names, and next to them, 'pending'.",
+        gate: "A gate of blackened brass at the far end, with a relief of a lighthouse turned upside down.",
+      },
+      encounters: [{ id: "index-keepers", title: "The Keepers of the Index", monsters: [REDACTED_SCHOLAR, REDACTED_SCHOLAR, BLANK_KNIGHT], loot: [ITEMS.index], gold: 50 }],
+      exits: [{ to: "the-undertow", days: 0 }, { to: "the-unlit-lighthouse", days: 0 }],
+    },
+    "the-unlit-lighthouse": {
+      id: "the-unlit-lighthouse",
+      title: "The Unlit Lighthouse",
+      dark: true,
+      region: "below",
+      gmNotes: `A lighthouse built upside down under the sea: you enter at the top and climb down the stair toward the lamp. \
+Every landing holds something the coast forgot, arranged like offerings. At the bottom, the lamp: the Redactor's Voice, a slow \
+white beam that speaks. Before it fights, it offers each character (privately, one at a time, as you choose) to erase one thing \
+they would be glad to lose: a grief, a guilt, a dead companion (if anyone has died, it will name them). Accepting means \
+take_memory, and the Voice keeps its word. Then start the "the-voice" encounter. A party that learned its weakness in the Index \
+can blunt its Summarize (set_status "Anchored" on whoever reads their name aloud). The Drowned Lamp lies in the wreck of \
+the lamp room: whoever carries it out no longer needs torches.
+When the Voice goes dark, Act 2 is complete: the Undertow floods with light, the Quiet Harbor starts to remember, and the \
+Redactor itself, somewhere far out to sea, speaks one word the whole coast hears. Grant XP (the kill gives some; award the rest), \
+then end the session with a recap.`,
+      inspectables: {
+        stair: "A spiral stair going down, not up. Water presses against the windows from outside, and fish watch.",
+        offerings: "On every landing, forgotten things arranged with care: a whole wedding feast, still warm. A war banner. A child's drawing of a lighthouse the right way up.",
+        lamp: "The lamp at the bottom turns slowly. When its beam passes over you, you briefly can't remember why you came.",
+      },
+      encounters: [{ id: "the-voice", title: "The Redactor's Voice", finale: true, onArrival: true, monsters: [THE_VOICE, SILT_GHOST, BLANK_KNIGHT], gold: 80, loot: [ITEMS.lamp] }],
+      exits: [{ to: "the-undertow", days: 1 }],
     },
   },
 };

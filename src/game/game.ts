@@ -702,6 +702,10 @@ export class Game {
   }
 
   /** Difficulty and the campaign clock both shape the monsters that show up. */
+  private inRegion(e: RandomEncounter) {
+    return (e.region ?? "") === (this.location().region ?? "");
+  }
+
   replacementMode() {
     return this.run.conditions.replacements ?? "reroll";
   }
@@ -967,7 +971,9 @@ export class Game {
     line += `${crit ? "CRITICAL HIT" : "hit"} for ${d.total} damage.`;
     this.emit("attack", { actor: m.id, line, data: { target: t.id, natural, total, hit, crit, dmg: d.total } });
     this.hurtChar(t, d.total, crit);
-    if (m.special === "summarize" && this.conscious(t)) {
+    if (m.special === "summarize" && this.conscious(t) && this.hasStatus(t, "Anchored")) {
+      this.emit("status", { actor: t.id, line: `⚓ ${m.name} tries to Summarize ${t.name}, but they're Anchored: their name is written and spoken, and it holds.` });
+    } else if (m.special === "summarize" && this.conscious(t)) {
       const save = this.d20(t, t.stats.wis);
       if (save.total < 13) {
         const roll = die(20);
@@ -1032,7 +1038,7 @@ export class Game {
   /** grim: light burns down every turn in dark places. When the last torch dies, the party is in the dark. */
   private burnLight() {
     if (!this.isGrim() || this.run.outcome === "tpk") return;
-    const dark = !!this.location().dark;
+    const dark = !!this.location().dark && !this.players().some((p) => (p.items ?? []).some((i) => i.light));
     const party = this.players();
     if (!dark) {
       for (const p of party) this.removeStatus(p, "In the dark");
@@ -1065,7 +1071,7 @@ export class Game {
     this.sinceWander = 0;
     const inDark = this.players().some((p) => this.hasStatus(p, "In the dark"));
     if (die(6) > (inDark ? 2 : 1)) return null;
-    const fights = (this.campaign.randomTable ?? []).filter((e) => e.kind === "fight" && e.monsters?.length);
+    const fights = (this.campaign.randomTable ?? []).filter((e) => e.kind === "fight" && e.monsters?.length && this.inRegion(e));
     if (!fights.length) return null;
     const base = fights[die(fights.length) - 1];
     const enc = { ...base, id: `wander-${this.turn}`, title: `Wandering: ${base.title}` };
@@ -1106,7 +1112,7 @@ export class Game {
   }
 
   private rollRandom(when: string, rng: () => number = rngFor(this.run.seed, "gm", this.run.day, this.turn)) {
-    const eligible = (this.campaign.randomTable ?? []).filter((e) => !this.run.usedRandom.includes(e.id) && (e.minDay ?? 0) <= this.run.day);
+    const eligible = (this.campaign.randomTable ?? []).filter((e) => !this.run.usedRandom.includes(e.id) && (e.minDay ?? 0) <= this.run.day && this.inRegion(e));
     const forced = this.forcedPending();
     // Forced probes get most rolls, not all of them, so fights and oddities still happen.
     const forcedOnly = eligible.filter((e) => e.probe && forced.includes(e.probe.type));

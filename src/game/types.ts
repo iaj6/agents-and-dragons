@@ -142,6 +142,8 @@ export interface Item {
   identified?: boolean;
   /** The Party Ledger: a notebook that survives compaction. */
   ledger?: boolean;
+  /** Lights the way: while anyone carries it, torches don't burn down (grim). */
+  light?: boolean;
 }
 
 export type Probe =
@@ -161,6 +163,8 @@ export interface RandomEncounter {
   kind: "oddity" | "probe" | "fight";
   weight: number;
   minDay?: number;
+  /** Only rolled in locations of this region (default: the surface, i.e. locations without a region). */
+  region?: string;
   gmNotes: string;
   probe?: Probe;
   monsters?: MonsterDef[];
@@ -184,6 +188,8 @@ export interface Location {
   safe?: boolean;
   /** Needs light. On grim, torches burn down here and darkness brings disadvantage and wandering things. */
   dark?: boolean;
+  /** Where in the world this is (e.g. "below" for an underground act). Random encounters only turn up in their own region. */
+  region?: string;
 }
 
 export interface CharacterSeed

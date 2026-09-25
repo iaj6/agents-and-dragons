@@ -34,6 +34,11 @@ const ART: Record<string, { size: "1024x1024" | "1536x1024"; prompt: string }> =
   "scene-brinecombe": { size: "1536x1024", prompt: `${SCENE} a grey fishing town harbor with a stone quay and fishing boats; at low tide the ribs of a sunken ship show beneath the water; townsfolk stand apart from each other on the quay.` },
   "scene-salt-stacks": { size: "1536x1024", prompt: `${SCENE} towers of pressed white salt blocks stacked to a vaulted ceiling, each block tagged with a tiny label, a tall archivist in spectacles of polished salt writing in a ledger.` },
   "scene-tidewrack-stair": { size: "1536x1024", prompt: `${SCENE} a narrow stair cut into a sea cliff descending into a dark sea cave where the tide has drawn far out; at the bottom waits a tall figure made of black ink strokes holding a ledger and a long black quill.` },
+  // Act 2, beneath the Stair
+  "scene-the-undertow": { size: "1536x1024", prompt: `${SCENE} flooded rock tunnels under the sea, knee-deep black water, faint glowing silt swirling around the legs of four small adventurers holding a single torch, pale eels in the dark water.` },
+  "scene-the-quiet-harbor": { size: "1536x1024", prompt: `${SCENE} a peaceful hidden village in a vast dry cave around an underground lagoon, lamps of cold green flame, children floating paper boats, an old white-haired woman laughing.` },
+  "scene-the-sunken-index": { size: "1536x1024", prompt: `${SCENE} a drowned library hall of salt shelves stretching into darkness, grey-robed scholars at long desks whose faces are crossed out with a single neat line, a chained catalogue on a lectern.` },
+  "scene-the-unlit-lighthouse": { size: "1536x1024", prompt: `${SCENE} the interior of a lighthouse built upside down under the sea, a spiral stair descending toward a great lamp at the bottom casting a slow white beam, fish watching through the windows.` },
 };
 
 const only = process.argv.slice(2);
