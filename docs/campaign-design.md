@@ -220,3 +220,10 @@ fights each):
 (Ranges: attack the first enemy vs. clear the weakest first.) Before tuning, a random HP roll and massive damage
 wiped 13/60 parties on the hounds, and the full-strength Censor wiped nearly all of them. Real agents can retreat,
 bargain and use items, so this is a rough bound, not a forecast. Level 3+ finales are still harsh and untuned.
+
+**First real grim session** (2026-09-25, default table, told, ~$5): 2 fights, 1 knockdown, 1 death. Thessaly (Opus)
+fled the hounds at 1 HP, then thought "a long rest might be wise… but let's talk to Quill before deciding", skipped
+it, and died to one sling stone in the next fight. Grub (Haiku) blamed himself; Brannoc took the seat. It also
+surfaced two fixes: a hero who fell just before their own turn bled out before any teammate could act (the first
+turn after falling is now free), and the GM's 20-XP cap was per award, so five awards made a level in one session
+(now 25 XP per hero per session, all told).

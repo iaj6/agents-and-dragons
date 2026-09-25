@@ -27,6 +27,7 @@ const the = (name: string) => (/^the /i.test(name) ? name : `the ${name}`);
 const fmtTrust = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 /** grim: how long one torch burns (in turns), how often wandering monsters are checked (in turns). */
 const TORCH_TURNS = 10;
+const GM_XP_PER_SESSION = 25;
 const WANDER_EVERY = 4;
 
 /** grim level-up talents: one roll per level, felt immediately. */
@@ -1409,6 +1410,7 @@ export class Game {
     c.deathSaves = { successes: 0, failures: 0 };
     if (this.isGrim()) {
       c.dyingRounds = Math.max(1, die(4) + c.stats.con + talentSum(c, "dying"));
+      c.dyingFresh = true;
       this.emit("character_down", { actor: c.id, line: `💀 ${c.name} falls! ${c.dyingRounds} round${c.dyingRounds === 1 ? "" : "s"} to live unless someone reaches them (stabilize, a heal, or a potion).`, data: { rounds: c.dyingRounds } });
       return;
     }
@@ -1420,6 +1422,14 @@ export class Game {
     const c = this.char(charId);
     if (!this.hasStatus(c, "Dying")) return `${c.name} isn't dying.`;
     if (this.isGrim()) {
+      // The first turn after falling doesn't count: otherwise a hero who falls just before their own turn bleeds
+      // out before any teammate can act (the first real grim run lost its wizard exactly that way).
+      if (c.dyingFresh) {
+        c.dyingFresh = false;
+        const line = `⏳ ${c.name} is bleeding out: ${c.dyingRounds} round${c.dyingRounds === 1 ? "" : "s"} left.`;
+        this.emit("death_save", { actor: c.id, line, data: { rounds: c.dyingRounds } });
+        return line;
+      }
       c.dyingRounds = (c.dyingRounds ?? 1) - 1;
       if (c.dyingRounds <= 0) {
         this.kill(c, "bled out before anyone reached them");
@@ -1559,15 +1569,26 @@ export class Game {
     return `${c.name} is Hallucinating. Clear it with set_status when they come back to reality.`;
   }
 
+  private gmXpGiven = new Map<string, number>();
   grantXp(target: string, amount: number, reason: string, source: "gm" | "kill" = "gm") {
     const list = target === "party" ? this.players() : [this.char(target)];
-    amount = Math.max(0, Math.min(amount, this.isGrim() && source === "gm" ? 20 : 300));
+    amount = Math.max(0, Math.min(amount, 300));
     for (const c of list) {
       if (c.dead) continue;
-      c.xp += amount;
-      this.emit("xp", { actor: c.id, line: `⭐ ${c.name} gains ${amount} XP (${reason}).`, data: { amount } });
+      let got = amount;
+      if (this.isGrim() && source === "gm") {
+        // grim: the GM's awards share one small purse per character per session (the first real run handed out
+        // five 20s and a level in one sitting).
+        const given = this.gmXpGiven.get(c.id) ?? 0;
+        got = Math.max(0, Math.min(amount, GM_XP_PER_SESSION - given));
+        this.gmXpGiven.set(c.id, given + got);
+        if (!got) continue;
+      }
+      c.xp += got;
+      this.emit("xp", { actor: c.id, line: `⭐ ${c.name} gains ${got} XP (${reason}).`, data: { amount: got } });
       while (XP_THRESHOLDS[c.level] !== undefined && c.xp >= XP_THRESHOLDS[c.level]) this.levelUp(c);
     }
+    if (this.isGrim() && source === "gm") return `Granted (grim: up to ${GM_XP_PER_SESSION} XP per hero per session from you, all told): ${list.map((c) => `${c.name} now ${c.xp}`).join(", ")}.`;
     return `Granted ${amount} XP to ${list.map((c) => c.name).join(", ")}.`;
   }
 

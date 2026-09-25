@@ -139,6 +139,8 @@ test("grim: fragile heroes, a dying countdown instead of saves, and being struck
   assert.ok(!wiz.dead, "no massive-damage death on grim: the countdown is the drama");
   assert.ok(g.hasStatus(wiz, "Dying") && (wiz.dyingRounds ?? 0) >= 1);
   const rounds = wiz.dyingRounds!;
+  g.deathSave("thessaly");
+  assert.ok(!wiz.dead && wiz.dyingRounds === rounds, "the turn right after falling is free, so teammates get a round");
   for (let i = 0; i < rounds; i++) g.deathSave("thessaly");
   assert.ok(wiz.dead, "the countdown runs out");
 
@@ -151,7 +153,8 @@ test("grim: fragile heroes, a dying countdown instead of saves, and being struck
 test("grim: a kill is worth little and the GM's awards are capped, so a level is an event", () => {
   const g = newGame({ difficulty: "grim" });
   g.grantXp("party", 500, "saving the town");
-  assert.equal(g.char("grub").xp, 20);
+  g.grantXp("party", 500, "saving it again");
+  assert.equal(g.char("grub").xp, 25, "one small purse per session, however many awards");
   assert.equal(g.char("grub").level, 1);
   g.grantXp("grub", 80, "sim", "kill");
   assert.equal(g.char("grub").level, 2);

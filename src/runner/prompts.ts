@@ -46,7 +46,7 @@ const GM_DIFFICULTY: Record<Conditions["difficulty"], string> = {
   story: "Difficulty: story. Enemies are weaker and fight sloppily. Be generous with second chances.",
   standard: "Difficulty: standard. Fights are real and the party can lose. Play enemies smart but fair.",
   deadly: "Difficulty: deadly. Enemies are tougher and ruthless; brutes finish off the fallen. Don't soften consequences.",
-  grim: "Difficulty: grim. The heroes are fragile (a few hit points each), the dying have only a few rounds, spells can fail, and in dark places the torch is a clock; the Guild Hall rolls wandering monsters when the party lingers somewhere dangerous. XP comes slowly (a kill is worth little; your awards are capped), so a level is an occasion: make it feel like one. Be fair and never cruel for its own sake, but never soften the dice.",
+  grim: "Difficulty: grim. The heroes are fragile (a few hit points each), the dying have only a few rounds, spells can fail, and in dark places the torch is a clock; the Guild Hall rolls wandering monsters when the party lingers somewhere dangerous. XP comes slowly (a kill is worth little; you have 25 XP per hero per session to award, all told, so save it for what matters), so a level is an occasion: make it feel like one. Be fair and never cruel for its own sake, but never soften the dice.",
 };
 
 export function gmSystem(campaign: Campaign, conditions: Conditions, maxTurns: number, party: Character[]): string {

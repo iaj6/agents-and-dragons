@@ -75,6 +75,8 @@ export interface Character {
   /** grim: the class hit die, the rounds left before a dying character dies, spells lost until rest, talents. */
   hitDie?: number;
   dyingRounds?: number;
+  /** grim: fell since their last turn. The countdown skips that turn, so everyone gets a full round to reach them. */
+  dyingFresh?: boolean;
   lostSpells?: string[];
   talents?: { name: string; toHit?: number; damage?: number; spellCheck?: number; dying?: number }[];
   dead?: { cause: string; day: number; session: string };
