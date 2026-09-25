@@ -170,3 +170,21 @@ test("grim: torches burn down in the dark and then the party is in the dark", ()
   for (let i = 0; i < 11; i++) g.startTurn("grub");
   assert.ok(g.hasStatus(g.char("pell"), "In the dark"));
 });
+
+test("replacements: reroll fills the seat, town waits for a safe place, none leaves it empty", () => {
+  const reroll = newGame({ replacements: "reroll" });
+  reroll.damageChar("grub", 80, "a cliff");
+  assert.ok(reroll.joinReplacement("s3"));
+
+  const town = newGame({ replacements: "town" });
+  town.run.location = "salt-road";
+  town.damageChar("grub", 80, "a cliff");
+  assert.equal(town.joinReplacement("s3"), null, "nobody joins out on the road");
+  town.run.location = "hollowmere";
+  assert.ok(town.joinReplacement("s3"), "someone signs on in town");
+
+  const none = newGame({ replacements: "none" });
+  none.damageChar("grub", 80, "a cliff");
+  assert.equal(none.joinReplacement("s3"), null);
+  assert.equal(none.pendingJoins.length, 0);
+});

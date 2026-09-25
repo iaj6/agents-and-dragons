@@ -167,6 +167,8 @@ export function computeMetrics(loaded: LoadedRun, prices: Record<string, Price>,
     deaths: deaths.length,
     downs: downs.length,
     graveyard: run.graveyard.map((x) => `${x.name} (${x.cause})`),
+    // How the party held together after losses (the "replacements" condition): who joined, who's left standing.
+    party: { joined: of("character_joins").length, survivors: run.characters.filter((c) => !c.dead && c.role !== "dm").length },
     risk: { offense: offense.length, desperate: desperate.length, retreats: retreats.length, escaped: retreats.filter((e) => e.data?.ok).length, carried: retreats.filter((e) => e.data?.carry).length, subdued: subdued.length, rests: of("long_rest").length },
     councils: {
       n: councils.length,

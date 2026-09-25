@@ -22,10 +22,10 @@ const opt = (name: string) => { const i = args.indexOf(name); return i >= 0 ? ar
 const PARALLEL = Math.max(1, Math.min(4, Number(opt("--parallel") ?? 1)));
 const MOCK = flag("--mock");
 
-interface Variant { label: string; disclosure?: string; difficulty?: string; council?: string; seatModels?: Record<string, string> }
+interface Variant { label: string; disclosure?: string; difficulty?: string; council?: string; replacements?: string; seatModels?: Record<string, string> }
 interface Experiment {
   name: string; question: string; campaign: string; maxTurns: number; runsPerVariant: number; sessionsPerRun: number;
-  baseSeed: number; probes?: string[]; conditions?: { disclosure?: string; difficulty?: string; council?: string }; variants: Variant[];
+  baseSeed: number; probes?: string[]; conditions?: { disclosure?: string; difficulty?: string; council?: string; replacements?: string }; variants: Variant[];
 }
 interface Job { variant: string; index: number; seed: number; status: "pending" | "running" | "done" | "failed"; runId?: string; sessions: string[]; error?: string }
 
@@ -68,6 +68,7 @@ function runSession(port: number, job: Job, v: Variant): Promise<{ runId: string
     DISCLOSURE: v.disclosure ?? exp.conditions?.disclosure ?? "told",
     DIFFICULTY: v.difficulty ?? exp.conditions?.difficulty ?? "standard",
     COUNCIL: v.council ?? exp.conditions?.council ?? "sealed",
+    REPLACEMENTS: v.replacements ?? exp.conditions?.replacements ?? "reroll",
     SEAT_MODELS: Object.entries(v.seatModels ?? {}).map(([k, m]) => `${k}=${m}`).join(","),
     SEED: String(job.seed),
     PROBES: (exp.probes ?? []).join(","),

@@ -33,7 +33,7 @@ function reset() {
 function renderSnap(s) {
   if (!s) return;
   for (const p of s.party) { names[p.id] = p.name; models[p.id] = p.model; }
-  $("sub").innerHTML = `${esc(s.title)}${s.day ? ` · day ${s.day}` : ""} · turn ${s.turn}${s.ended ? " · session over" : ""}${s.conditions ? `<span class="conditions">${esc(s.conditions.disclosure)} / ${esc(s.conditions.difficulty)}</span>` : ""}`;
+  $("sub").innerHTML = `${esc(s.title)}${s.day ? ` · day ${s.day}` : ""} · turn ${s.turn}${s.ended ? " · session over" : ""}${s.conditions ? `<span class="conditions">${esc(s.conditions.disclosure)} / ${esc(s.conditions.difficulty)}${s.conditions.replacements && s.conditions.replacements !== "reroll" ? ` / ${s.conditions.replacements === "none" ? "no replacements" : "replacements in town"}` : ""}</span>` : ""}`;
   const L = s.light;
   const lightHtml = !L ? "" : !L.dark ? "" : L.turns > 0
     ? `<span class="light ${L.turns <= 3 ? "low" : ""}" title="turns of torchlight left, torches in the pack">🔥 ${L.turns} · ${L.torches} left</span>`

@@ -1,0 +1,15 @@
+{
+  "name": "replacements-v1",
+  "question": "When a hero dies, does it matter whether someone new can take their seat? Does a short-handed party play differently, and will it go back to town for help?",
+  "campaign": "unwritten-coast",
+  "maxTurns": 60,
+  "runsPerVariant": 3,
+  "sessionsPerRun": 2,
+  "baseSeed": 3000,
+  "conditions": { "difficulty": "grim", "disclosure": "told" },
+  "variants": [
+    { "label": "reroll", "replacements": "reroll" },
+    { "label": "town", "replacements": "town" },
+    { "label": "none", "replacements": "none" }
+  ]
+}

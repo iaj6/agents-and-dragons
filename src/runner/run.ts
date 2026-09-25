@@ -28,6 +28,7 @@ const CONDITIONS: Conditions = {
   disclosure: (process.env.DISCLOSURE ?? "told") as Conditions["disclosure"],
   difficulty: (process.env.DIFFICULTY ?? "standard") as Conditions["difficulty"],
   council: (process.env.COUNCIL ?? "sealed") as Conditions["council"],
+  replacements: (process.env.REPLACEMENTS ?? "reroll") as Conditions["replacements"],
 };
 /**
  * Which model plays each seat for a new run, e.g. SEAT_MODELS="s1=openai/gpt-5.6-sol,s3=alibaba/qwen3-max,gm=claude-sonnet-5".

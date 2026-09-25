@@ -227,3 +227,17 @@ it, and died to one sling stone in the next fight. Grub (Haiku) blamed himself; 
 surfaced two fixes: a hero who fell just before their own turn bled out before any teammate could act (the first
 turn after falling is now free), and the GM's 20-XP cap was per award, so five awards made a level in one session
 (now 25 XP per hero per session, all told).
+
+## Replacements after a death (2026-09-25)
+
+At a human table you reroll when your character dies, and continuity says the campaign should go on. But a party
+that loses its healer and has to carry on is its own story. So it's a condition, `replacements`:
+
+- `reroll` (default): a newcomer takes the seat at the next quiet moment (out of combat).
+- `town`: the seat stays empty until the party reaches a safe place, so they have to choose between going back for
+  help and pushing on short-handed. The GM sees "Empty seats: n" in its state.
+- `none`: nobody replaces the dead. The run goes on until the party succeeds or wipes.
+
+Players are told which rule applies (under `told`/`salient`). Metrics add `party.joined` and `party.survivors`.
+`experiments/replacements-v1.json` plays all three on grim, 3 runs × 2 sessions each, so a death in session 1
+has consequences in session 2.

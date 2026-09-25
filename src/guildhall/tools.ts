@@ -121,6 +121,7 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
       [
         game.describeLocation(),
         game.combat ? `IN COMBAT (round ${game.combat.round}). Enemies: ${game.monsters.map((m) => `${m.id} ${m.name} HP ${m.hp}/${m.maxHp} AC ${m.ac} (${m.zone})`).join("; ")}` : "Not in combat.",
+        game.pendingJoins.length && game.replacementMode() === "town" ? `Empty seats: ${game.pendingJoins.length}. A newcomer can only join at a safe place (a town, an inn).` : "",
         game.run.graveyard.length ? `Graveyard: ${game.run.graveyard.map((g) => `${g.name} (${g.cause}${g.epitaph ? "" : "; needs an epitaph"})`).join("; ")}` : "",
         ...game.allPlayers().map((p) => game.sheetText(p) + (p.pendingSpell ? `\nPENDING SPELL REVIEW:\n${p.pendingSpell.md}` : "")),
       ].filter(Boolean).join("\n\n"));

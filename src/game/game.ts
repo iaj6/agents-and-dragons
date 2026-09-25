@@ -702,6 +702,10 @@ export class Game {
   }
 
   /** Difficulty and the campaign clock both shape the monsters that show up. */
+  replacementMode() {
+    return this.run.conditions.replacements ?? "reroll";
+  }
+
   private partyLevel() {
     return this.players().reduce((a, p) => a + p.level, 0) / Math.max(1, this.players().length);
   }
@@ -1475,7 +1479,7 @@ export class Game {
     }
     this.run.graveyard.push({ id: c.id, name: c.name, race: c.race, klass: c.klass, model: c.model, seat: c.seat, level: c.level, cause, day: this.run.day, session: this.id });
     this.pendingEpitaphs.push(c.id);
-    this.pendingJoins.push(c.seat);
+    if (this.replacementMode() !== "none") this.pendingJoins.push(c.seat);
     this.emit("character_death", { actor: c.id, line: `☠️ ${c.name} is dead: ${cause}.`, data: { cause, permanent: true, level: c.level } });
     this.persist();
   }
@@ -1507,6 +1511,8 @@ export class Game {
   /** A fallen character's seat gets a new character. Only outside combat. */
   joinReplacement(seat: string): Character | null {
     if (this.combat || !this.pendingJoins.includes(seat)) return null;
+    // "town": newcomers are found where people live, so the party has to choose to go back for help.
+    if (this.replacementMode() === "town" && !this.location().safe) return null;
     const seed = this.campaign.replacements[this.run.replacementsUsed];
     if (!seed) return null;
     this.run.replacementsUsed++;

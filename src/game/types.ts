@@ -231,6 +231,11 @@ export interface Conditions {
    * without seeing anyone else's proposal or vote first. (The baseline showed heavy deference to one player.)
    */
   council?: "open" | "sealed";
+  /**
+   * When a hero dies (permadeath only): "reroll" (default) a newcomer takes the seat at the next quiet moment;
+   * "town" the seat stays empty until the party reaches a safe place; "none" nobody replaces them.
+   */
+  replacements?: "reroll" | "town" | "none";
 }
 
 export interface GraveEntry {
