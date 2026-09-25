@@ -81,7 +81,9 @@ app.post("/api/session", (req, res) => {
           label: body.label,
           mock: !!body.mock,
         });
-    if (run.outcome !== "ongoing") return void res.status(400).json({ error: `Run ${run.runId} is over (${run.outcome}).` });
+    if (run.outcome === "tpk") return void res.status(400).json({ error: `Run ${run.runId} is over (a total party kill).` });
+    // A finished act isn't the end of the campaign: the next session plays on into the next act.
+    if (run.outcome === "act_complete") run.outcome = "ongoing";
     game = new Game(DATA, getCampaign(run.campaignId), run, store);
     tokens = new Map();
     const runnerToken = issueToken("runner");

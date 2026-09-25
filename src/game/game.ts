@@ -845,7 +845,10 @@ export class Game {
       for (const m of this.monsters) this.emit("monster_fled", { actor: m.id, line: `🏳️ ${m.name} breaks off and leaves.` });
     }
     this.monsters = [];
-    if (outcome === "victory" && enc.finale && this.players().length) this.run.outcome = "act_complete";
+    if (outcome === "victory" && enc.finale && this.players().length) {
+      this.run.outcome = "act_complete";
+      this.run.actsCompleted = (this.run.actsCompleted ?? 0) + 1;
+    }
     this.emit("combat_end", {
       line: outcome === "victory" ? `🏆 The fight is over: ${enc.title}.` : outcome === "party_down" ? `🕯️ The party has fallen.` : outcome === "retreated" ? `🏃 The party escapes: ${enc.title}.` : `The fight ends.`,
       data: { outcome, encounter: enc.id, finale: !!enc.finale, rounds },

@@ -36,6 +36,8 @@ export interface RunState {
   plans: { session: string; question: string; adopted: string | null; by: string | null }[];
   replacementsUsed: number;
   outcome: "ongoing" | "act_complete" | "tpk";
+  /** Finales beaten so far (a run can go on past one act). */
+  actsCompleted?: number;
   /** Unclaimed loot on the table. */
   pile: { items: Item[]; gold: number };
   /** The Lantern Ledger's pages. They survive every kind of memory loss. */
