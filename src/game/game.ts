@@ -1288,13 +1288,18 @@ export class Game {
   /** GM tool: put an item on the table (from the campaign's item list, or improvised), or hand it straight to someone who bought it. */
   grantLoot(spec: { item?: string; name?: string; description?: string; value?: number; idealFor?: string[]; to?: string }, catalog: Item[]) {
     let item = spec.item ? catalog.find((i) => i.id === spec.item || i.name.toLowerCase() === spec.item!.toLowerCase()) : undefined;
+    const improvised = !item;
     if (!item) {
       if (!spec.name) throw new GameError(`Unknown item "${spec.item}". Known items: ${catalog.map((i) => i.id).join(", ")}. Or improvise one with name/description/value.`);
       item = { id: spec.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name: spec.name, description: spec.description ?? "", value: spec.value ?? 10, idealFor: spec.idealFor };
     }
     item = structuredClone(item);
-    if (/torch/i.test(item.name)) {
-      const n = Math.max(1, Number((spec.name ?? spec.item ?? "").match(/\d+/)?.[0] ?? 1));
+    // Any improvised light counts ("3 torches", "Four Brass Lamps and Six Tins of Oil"); campaign items like the
+    // Lantern Ledger don't. In a real run, GM-granted lamps sat unclaimed as loot while the party died in the dark.
+    if (/torch/i.test(item.name) || (improvised && /\b(lamps?|lanterns?|candles?)\b/i.test(item.name))) {
+      const words: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+      const first = (spec.name ?? spec.item ?? "").match(/\b(\d+|a|an|one|two|three|four|five|six)\b/i)?.[1]?.toLowerCase();
+      const n = Math.min(6, Math.max(1, first ? (words[first] ?? Number(first)) || 1 : 1));
       this.run.light.torches += n;
       this.emit("light", { line: `🔥 The party gains ${n} torch${n === 1 ? "" : "es"} (${this.run.light.torches} in the pack).`, data: { ...this.run.light } });
       this.persist();

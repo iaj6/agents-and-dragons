@@ -193,3 +193,12 @@ test("grim: the GM can't narrate the dark away; light has to be granted", () => 
   const g = newGame({ difficulty: "grim" });
   assert.throws(() => g.setStatus("grub", "In the dark", "a lamp", false), GameError);
 });
+
+test("grim: improvised lamps count as light, campaign items named 'Lantern' don't", () => {
+  const g = newGame({ difficulty: "grim" });
+  g.run.light.torches = 0;
+  g.grantLoot({ name: "Four Brass Lamps and Six Tins of Oil" }, camp.items!);
+  assert.equal(g.run.light.torches, 4);
+  g.grantLoot({ item: "lantern-ledger" }, camp.items!);
+  assert.equal(g.run.light.torches, 4);
+});
