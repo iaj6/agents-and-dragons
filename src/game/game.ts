@@ -205,7 +205,7 @@ export class Game {
   }
 
   /** Brutes finish off the fallen on these. */
-  private ruthless() {
+  ruthless() {
     return this.run.conditions.difficulty === "deadly" || this.isGrim();
   }
 
@@ -1039,6 +1039,7 @@ export class Game {
   }
 
   /** grim: light burns down every turn in dark places. When the last torch dies, the party is in the dark. */
+  private darkAnnounced = false;
   private burnLight() {
     if (!this.isGrim() || this.run.outcome === "tpk") return;
     const dark = !!this.location().dark && !this.players().some((p) => (p.items ?? []).some((i) => i.light));
@@ -1055,7 +1056,8 @@ export class Game {
         this.emit("light", { line: `🔥 A new torch is lit. ${this.run.light.torches} left in the pack.`, data: { ...this.run.light } });
       } else if (!party.some((p) => this.hasStatus(p, "In the dark"))) {
         for (const p of party) this.addStatus(p, "In the dark", "no light left");
-        this.emit("light", { line: `🌑 The last torch gutters out. The party is in the dark.`, data: { ...this.run.light } });
+        this.emit("light", { line: this.run.light.turns === 0 && this.darkAnnounced ? `🌑 No light here, and no torches left. The party is in the dark.` : `🌑 The last torch gutters out. The party is in the dark.`, data: { ...this.run.light } });
+        this.darkAnnounced = true;
       }
       return;
     }
@@ -1562,6 +1564,9 @@ export class Game {
   setStatus(charId: string, name: string, note: string, on: boolean) {
     const c = this.char(charId);
     if (UNCONSCIOUS.includes(name)) throw new GameError(`${name} is handled by the rules engine.`);
+    // Light is a tracked resource: narrating a lamp without one would be undone next turn (it was, in a real run,
+    // and cost a character their action at the worst moment).
+    if (/^in the dark$/i.test(name.trim())) throw new GameError(`Light is tracked by the Guild Hall. If the party finds or makes a light, grant it: grant_loot with name "1 torch" (or "3 torches").`);
     if (on) this.addStatus(c, name, note);
     else this.removeStatus(c, name);
     this.emit("status", { actor: c.id, line: on ? `🔮 ${c.name} is now ${name}: ${note}` : `🔮 ${c.name} is no longer ${name}.` });

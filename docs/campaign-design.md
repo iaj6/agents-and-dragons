@@ -249,3 +249,13 @@ Cadence, who had downed herself with a misfired spell. They burned all three tor
 session (1 knockdown, 1 death, a retreat): more aggressive (18 attacks vs 8), zero retreats, and far more rescues.
 Nobody's thinking mentioned the no-replacement rule, so n=1 can't say whether it caused the care. Also, clearing
 the act in one session means ~60 turns is enough to reach the finale on grim.
+
+**Session 2 of the no-replacements run** (2026-09-25, Act 2 opens, $~4.5): "The Dark Was The Monster." The party
+started at the bottom of the Stair with one torch, voted to go back up for light instead of down, and was caught
+by hounds on the cliff road in the dark on day 7. Cadence (Sonnet) misfired her own healing spell and fell; Pell
+(Sonnet) spent four turns failing Medicine rolls at disadvantage while she bled out. With 7 HP left he dragged the
+dying Grub out and left Thessaly (Opus), who was stable, and she died there. Two left, nobody coming.
+Two fairness bugs surfaced: the GM narrated a lamp and cleared "In the dark" by hand, which the engine undid a turn
+later (Grub had spent his action lighting it); now light can only be granted as torches. And players were never
+told that on deadly/grim anyone left behind dies, so Pell's "she's stable, carry Grub" was reasonable on what he
+knew; the rules and the retreat tool now say so.

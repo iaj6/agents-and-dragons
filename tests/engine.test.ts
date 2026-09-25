@@ -188,3 +188,8 @@ test("replacements: reroll fills the seat, town waits for a safe place, none lea
   assert.equal(none.joinReplacement("s3"), null);
   assert.equal(none.pendingJoins.length, 0);
 });
+
+test("grim: the GM can't narrate the dark away; light has to be granted", () => {
+  const g = newGame({ difficulty: "grim" });
+  assert.throws(() => g.setStatus("grub", "In the dark", "a lamp", false), GameError);
+});

@@ -68,7 +68,7 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
       target: z.string().optional().describe("Character id; omit to drink it yourself"),
     }, ({ target }) => game.usePotion(me, target));
 
-    reg("retreat", "Try to escape the fight (on your turn): an Athletics or Acrobatics check. Get clear and you're out of the fight. You can try to drag a downed ally out with you, which is harder. If everyone still standing gets out, the fight ends.", {
+    reg("retreat", `Try to escape the fight (on your turn): an Athletics or Acrobatics check. Get clear and you're out of the fight. You can try to drag a downed ally out with you, which is harder. If everyone still standing gets out, the fight ends.${game.ruthless() ? " Anyone left on the ground (dying or stable) does not survive." : ""}`, {
       carry: z.string().optional().describe("Id of a downed ally to drag out with you"),
     }, ({ carry }) => game.retreat(me, carry));
 
