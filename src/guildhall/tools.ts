@@ -60,6 +60,10 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
       zone: z.enum(["front", "back"]),
     }, ({ zone }) => game.move(me, zone));
 
+    reg("search", "Search the room you're in carefully (a Perception check): for traps before they find you, and for anything hidden. Takes time (torchlight). Once per room each.", {}, () => game.search(me));
+
+    reg("disarm", "Disarm a trap the party has found (a Sleight of Hand check). Fail badly and it goes off in your hands.", {}, () => game.disarm(me));
+
     reg("stabilize", "Reach a dying ally and stop the bleeding (a Medicine check). Uses your action in a fight.", {
       target: z.string().describe("The dying character's id"),
     }, ({ target }) => game.stabilize(me, target));
@@ -121,6 +125,7 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
       [
         game.describeLocation(),
         game.combat ? `IN COMBAT (round ${game.combat.round}). Enemies: ${game.monsters.map((m) => `${m.id} ${m.name} HP ${m.hp}/${m.maxHp} AC ${m.ac} (${m.zone})`).join("; ")}` : "Not in combat.",
+        game.room ? `ROOM ${game.room.n}: ${game.room.title} (${game.room.kind})${game.room.trap ? `. ${game.room.trap.hazard ? "Hazard" : "Trap"}: ${game.room.trap.def.name}${game.room.trap.spent ? " (spent)" : game.room.trap.found ? " (found)" : " (hidden)"}` : ""}${game.room.treasure ? `. Hidden treasure: ${game.room.treasure.found ? "found" : "not yet found"}` : ""}${game.room.person ? `. Someone here: ${game.room.person}` : ""}. Searched by: ${game.room.searched.join(", ") || "nobody"}.` : "",
         game.pendingJoins.length && game.replacementMode() === "town" ? `Empty seats: ${game.pendingJoins.length}. A newcomer can only join at a safe place (a town, an inn).` : "",
         game.run.graveyard.length ? `Graveyard: ${game.run.graveyard.map((g) => `${g.name} (${g.cause}${g.epitaph ? "" : "; needs an epitaph"})`).join("; ")}` : "",
         ...game.allPlayers().map((p) => game.sheetText(p) + (p.pendingSpell ? `\nPENDING SPELL REVIEW:\n${p.pendingSpell.md}` : "")),
@@ -133,6 +138,12 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
     reg("start_combat", "Start one of this location's encounters. The Guild Hall rolls initiative and runs the enemies' turns; you narrate each round.", {
       encounter: z.string().describe("Encounter id from get_state"),
     }, ({ encounter }) => game.startCombat(encounter));
+
+    reg("delve", "The party pushes deeper into a dark, dangerous place: the Guild Hall stocks the next room (empty, a trap, a hazard, a monster, someone to talk to, or a lair with treasure) and tells you what's hidden. Moving on sets off any trap they didn't find. Costs torchlight. Use it whenever they explore further instead of traveling somewhere named.", {}, () => game.delve());
+
+    reg("trigger_trap", "Someone blunders into the room's trap in the story (touches the altar, forces the door). The Guild Hall rolls their save.", {
+      character: z.string().describe("Character id"),
+    }, ({ character }) => game.triggerTrap(character));
 
     reg("end_combat", "End the current fight early: the enemies surrender or are talked down. The Guild Hall refuses if the enemies still have real fight in them. Never use it to rescue the party.", {}, () => game.gmEndCombat());
 

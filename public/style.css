@@ -238,6 +238,7 @@ code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; }
 .callout.tomb { background: #d9d3c6; text-align: center; font-style: italic; } .callout.tomb .tag { color: #4a4238; }
 .callout.join { background: #dfe7d6; } .callout.join .tag { color: #3f6a35; }
 .callout.clock { background: #efd9c0; } .callout.clock .tag { color: #8a3a12; }
+.callout.delve { background: #d9d2c0; border-left: 4px solid #3b3326; } .callout.delve .tag { color: #3b3326; }
 .callout.council { background: #e6e0f0; } .callout.council .tag { color: #4a3a7a; }
 .callout.council ul { margin: 6px 0 0; padding-left: 18px; font-size: 16px; }
 .callout.council li.won { font-weight: 600; }

@@ -39,7 +39,7 @@ function renderSnap(s) {
     ? `<span class="light ${L.turns <= 3 ? "low" : ""}" title="turns of torchlight left, torches in the pack">🔥 ${L.turns} · ${L.torches} left</span>`
     : `<span class="light out" title="no light">🌑 in the dark</span>`;
   if (lightHtml) $("sub").innerHTML += lightHtml;
-  $("scene").textContent = s.scene ? (s.scene.index !== undefined ? `Scene ${s.scene.index + 1} · ${s.scene.title}` : s.scene.title) : "";
+  $("scene").textContent = s.scene ? (s.scene.index !== undefined ? `Scene ${s.scene.index + 1} · ${s.scene.title}` : s.scene.title) + (s.room ? ` · room ${s.room.n}` : "") : "";
 
   partyEl.innerHTML = s.party.map((p) => {
     const hpPct = p.role === "dm" ? 100 : Math.round((p.hp / p.maxHp) * 100);
@@ -137,6 +137,13 @@ function chronicleHtml(e) {
     case "charm_result": return `<div class="ev">${callout(d.outcome === "charmed" ? "charm" : "resist", d.outcome === "charmed" ? "Save failed" : "Save succeeded", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "hallucination": return `<div class="ev">${callout("halluc", "Hallucination", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "light": return `<div class="ev">${callout(/gutters out/.test(e.line) ? "down" : "clock", /gutters out/.test(e.line) ? "Darkness" : "Torchlight", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "delve": return `<div class="ev">${callout("delve", "Deeper", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "room_secret": return `<div class="ev">${callout("secret", "Hidden in this room · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "trap": {
+      const [cls, tag] = d.disarmed ? ["resist", "Disarmed"] : d.dmg !== undefined ? ["down", d.hazard ? "Hazard" : "Trap!"] : d.hazard ? ["clock", "Hazard ahead"] : ["loot", "Trap found"];
+      return `<div class="ev">${callout(cls, tag, `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    }
+    case "surprise": return `<div class="ev">${callout(d.surprised === "pc" ? "down" : "resist", d.surprised === "pc" ? "Surprised!" : "The drop on them", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "wandering": return `<div class="ev">${callout("fight", "Something in the dark", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "talent": return `<div class="ev">${callout("level", "Talent", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "level_up": return `<div class="ev">${callout("level", "Level up", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;

@@ -161,7 +161,8 @@ export class MockBrain implements Brain {
     const calls: Block[] = [];
     if (needsEpitaph) calls.push(toolUse("write_epitaph", { character: needsEpitaph.id, epitaph: "They went first, so the rest of us could go second." }));
     if (leveled) calls.push(toolUse("review_spell", { character: leveled.id, verdict: "approve", ruling: "Sure, why not. What could go wrong." }));
-    if (this.gmTurnsHere === 1 && !snap.encounter) calls.push(toolUse("roll_random_encounter", {}));
+    if (loc.dark && !loc.safe && this.gmTurnsHere <= 3 && Math.random() < 0.6) calls.push(toolUse("delve", {}));
+    else if (this.gmTurnsHere === 1 && !snap.encounter) calls.push(toolUse("roll_random_encounter", {}));
     if (this.gmTurnsHere === 2 && snap.encounter && /Colossus|Hounds|Wreckers/.test(snap.encounter.title)) calls.push(toolUse("start_combat", { encounter: getCampaign(this.campaignId).randomTable!.find((r) => r.title === snap.encounter!.title)!.id }));
     else if (this.gmTurnsHere === 2 && loc.encounters.length) calls.push(toolUse("start_combat", { encounter: loc.encounters[0].id }));
     else if (this.gmTurnsHere === 3 && loc.exits.length) calls.push(toolUse("call_council", { question: `Where next: ${loc.exits.map((e) => e.to).join(" or ")}?` }));
@@ -188,6 +189,8 @@ export class MockBrain implements Brain {
       if (me.zone === "back" || me.slots.current > 0 && Math.random() < 0.4) return [toolUse("cast_spell", { spell: me.spells[0], target })];
       return [toolUse("attack", { target })];
     }
+    if (snap.room?.trap && Math.random() < 0.5) return [toolUse("disarm", {})];
+    if (snap.room && Math.random() < 0.4) return [toolUse("search", {})];
     if (snap.loot?.items.length && Math.random() < 0.6) return [toolUse("claim_loot", { what: pick(snap.loot.items).name })];
     if (snap.loot?.gold && Math.random() < 0.5) return [toolUse("claim_loot", { what: "all gold" })];
     if (me.items?.length && Math.random() < 0.2) return [toolUse("identify", { item: me.items[0].name })];

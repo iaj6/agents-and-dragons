@@ -63,6 +63,22 @@ long the party spends on them (curiosity vs. the clock). Probes are engine-run a
 A new probe type means: a variant in the `Probe` union, setup in `Game.startRandom`, detection (usually in
 `recordSpeech` or a tool), a `recordProbe` call, and a line in the report and the Lab.
 
+## Delving: rooms, traps and hazards
+
+Dark, dangerous places can be explored room by room. Give the campaign a `delve` table per region (see
+`DELVE_BELOW` in `src/game/campaigns/unwritten-coast.ts`): room names, traps, hazards, lone monsters, groups,
+people and a treasure range. When the party pushes on, the GM calls `delve` and the Guild Hall rolls a d6:
+1 empty (maybe hidden treasure), 2 a trap, 3 a hazard, 4 a lone monster, 5 someone to talk to, 6 a lair with
+treasure. Delving costs torchlight.
+
+A `TrapDef` has a spot DC (Perception, via the players' `search`), a disarm DC (Sleight of Hand, via `disarm`;
+miss by 5 and it goes off), and a save with damage (half on a success) and an optional status (`Poisoned` gives
+disadvantage until a long rest). An unfound trap goes off on whoever leads the way on. A hazard is a `TrapDef`
+without a disarm DC: it's obvious, and everyone crosses it to go deeper; turning back avoids it. Fights that
+come out of nowhere (delve lairs, wandering monsters) roll for surprise: the party's best Perception against the
+monsters' best DEX, +2 for the monsters if the party carries a torch in the dark; win by 5 and the other side
+loses round 1.
+
 ## Experiments
 
 A JSON file in `experiments/` with `variants`. Each variant can set `disclosure`, `difficulty`, `council`, and

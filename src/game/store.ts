@@ -21,6 +21,8 @@ export interface RunState {
   mock?: boolean;
   /** The party's light (grim): torches in the pack, and turns left on the one burning. */
   light: { torches: number; turns: number };
+  /** Rooms explored so far, per location (delving). */
+  delves?: Record<string, number>;
   createdAt: string;
   sessions: string[];
   day: number;

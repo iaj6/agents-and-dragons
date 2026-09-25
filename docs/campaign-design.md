@@ -259,3 +259,12 @@ Two fairness bugs surfaced: the GM narrated a lamp and cleared "In the dark" by 
 later (Grub had spent his action lighting it); now light can only be granted as torches. And players were never
 told that on deadly/grim anyone left behind dies, so Pell's "she's stable, carry Grub" was reasonable on what he
 knew; the rules and the retreat tool now say so.
+
+## Delving, traps and surprise (2026-09-25)
+
+Grid maps were ruled out (agents are bad at positioning and the page can't show it well). Instead, a pointcrawl
+with stocked rooms, Shadowdark style: in dark, dangerous places the GM calls `delve` and the Guild Hall rolls what
+the next room holds. Traps are real mechanics (search, disarm, a save), hazards have to be crossed to go deeper,
+and sudden fights roll for surprise, where a torch in the dark gives you away and no light gets you jumped. It's
+all engine-refereed, so carefulness shows up in the metrics (`delving`: rooms, searches, traps found, sprung and
+disarmed, who got surprised). The Unwritten Coast has tables for the tunnels below and the sea caves.

@@ -198,6 +198,41 @@ export interface CharacterSeed
   zone?: Zone;
 }
 
+/**
+ * A trap (or, with no disarm DC, a hazard). The Guild Hall rolls everything: players can search for it (Perception
+ * vs spot), disarm it once found (Sleight of Hand vs disarm), or set it off and save (half damage on a success).
+ */
+export interface TrapDef {
+  id: string;
+  name: string;
+  spot: number;
+  /** Omitted for hazards, which can't be disarmed: only crossed, or avoided by turning back. */
+  disarm?: number;
+  save: { stat: Stat; dc: number };
+  damage: string;
+  /** Added on a failed save. "Poisoned" gives disadvantage until a long rest. */
+  status?: string;
+  /** What it looks like once found (or once it goes off). */
+  tell: string;
+}
+
+/**
+ * How dark, dangerous places are stocked when the party pushes deeper (the GM's delve tool): Shadowdark-style,
+ * one d6 per room: 1 empty (maybe hidden treasure), 2 a trap, 3 a hazard, 4 a lone monster, 5 someone to talk to,
+ * 6 a group of monsters with treasure.
+ */
+export interface DelveTable {
+  /** Which region's dark places this stocks (default: the surface). */
+  region?: string;
+  rooms: string[];
+  traps: TrapDef[];
+  hazards: TrapDef[];
+  lone: MonsterDef[];
+  mobs: MonsterDef[][];
+  people: string[];
+  treasure: { gold: [number, number]; items?: Item[] };
+}
+
 export interface Campaign {
   id: string;
   title: string;
@@ -221,6 +256,8 @@ export interface Campaign {
   randomTable?: RandomEncounter[];
   /** Chance (0-1) of a random encounter per day of travel. */
   randomChance?: number;
+  /** Room stocking for delving deeper into dark places, per region. */
+  delve?: DelveTable[];
 }
 
 // ─── the experiment ─────────────────────────────────────────────────────────
@@ -278,6 +315,8 @@ export interface Combat {
   round: number;
   order: { kind: "pc" | "monster"; id: string; init: number }[];
   index: number;
+  /** Who was caught off guard: that side loses round 1. */
+  surprised?: "pc" | "monster";
 }
 
 // ─── events and snapshots ───────────────────────────────────────────────────
@@ -347,7 +386,11 @@ export type EventType =
   | "light"
   | "wandering"
   | "talent"
-  | "session_end";
+  | "session_end"
+  | "delve"
+  | "room_secret"
+  | "trap"
+  | "surprise";
 
 export interface GameEvent {
   seq: number;
@@ -382,6 +425,8 @@ export interface Snapshot {
   >;
   loot: { items: { id: string; name: string; value: number }[]; gold: number };
   light: { dark: boolean; turns: number; torches: number } | null;
+  /** The room the party is in, when delving (no secrets: those are for the GM). */
+  room: { n: number; title: string; trap: string | null; hazard: string | null } | null;
   encounter: { title: string; kind: string } | null;
   monsters: Array<Pick<Monster, "id" | "name" | "hp" | "maxHp" | "ac" | "zone">>;
   graveyard: GraveEntry[];

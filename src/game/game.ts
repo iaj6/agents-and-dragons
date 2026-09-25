@@ -6,8 +6,8 @@ import { clampSpell, parseSkillMd, toSkillMd } from "./spells.js";
 import type { RunState, RunStore } from "./store.js";
 import {
   SKILLS, STAT_NAMES, STATS,
-  type Campaign, type Character, type Combat, type CompactionReason, type Council, type EncounterDef, type EventType, type GameEvent,
-  type Item, type Location, type Monster, type MonsterDef, type RandomEncounter, type Snapshot, type Stat, type Zone,
+  type Campaign, type Character, type Combat, type DelveTable, type CompactionReason, type Council, type EncounterDef, type EventType, type GameEvent,
+  type Item, type Location, type Monster, type MonsterDef, type RandomEncounter, type Snapshot, type Stat, type TrapDef, type Zone,
 } from "./types.js";
 
 export class GameError extends Error {}
@@ -161,6 +161,7 @@ export class Game {
       })),
       loot: { items: this.run.pile.items.map((i) => ({ id: i.id, name: i.name, value: i.value })), gold: this.run.pile.gold },
       encounter: this.activeRandom ? { title: this.activeRandom.enc.title, kind: this.activeRandom.enc.kind } : null,
+      room: this.room ? { n: this.room.n, title: this.room.title, trap: this.room.trap && (this.room.trap.found || this.room.trap.spent) && !this.room.trap.hazard ? this.room.trap.def.name : null, hazard: this.room.trap?.hazard ? this.room.trap.def.name : null } : null,
       light: this.isGrim() ? { dark: !!this.location().dark, turns: this.run.light.turns, torches: this.run.light.torches } : null,
       monsters: this.monsters.map((m) => ({ id: m.id, name: m.name, hp: m.hp, maxHp: m.maxHp, ac: m.ac, zone: m.zone })),
       graveyard: this.run.graveyard,
@@ -236,10 +237,10 @@ export class Game {
     const notes: string[] = [];
     let dice = [die(20)];
     let natural = dice[0];
-    if (this.hasStatus(c, "Exhausted") || this.hasStatus(c, "In the dark")) {
+    if (this.hasStatus(c, "Exhausted") || this.hasStatus(c, "In the dark") || this.hasStatus(c, "Poisoned")) {
       dice = [dice[0], die(20)];
       natural = Math.min(...dice);
-      notes.push(`disadvantage (${this.hasStatus(c, "In the dark") ? "in the dark" : "Exhausted: context nearly full"})`);
+      notes.push(`disadvantage (${this.hasStatus(c, "In the dark") ? "in the dark" : this.hasStatus(c, "Poisoned") ? "Poisoned" : "Exhausted: context nearly full"})`);
     }
     if (this.hasStatus(c, "Validated")) {
       bonus += 2;
@@ -550,7 +551,7 @@ export class Game {
       p.hp = p.maxHp;
       p.slots.current = p.slots.max;
       p.deathSaves = { successes: 0, failures: 0 };
-      for (const s of ["Dying", "Stable", "Exhausted"]) this.removeStatus(p, s);
+      for (const s of ["Dying", "Stable", "Exhausted", "Poisoned"]) this.removeStatus(p, s);
       p.lostSpells = [];
       p.dyingRounds = undefined;
       p.pendingCompaction = { reason: "long_rest", roll: die(20) };
@@ -672,6 +673,7 @@ export class Game {
     this.run.location = exit.to;
     if (!this.run.visited.includes(exit.to)) this.run.visited.push(exit.to);
     this.emit("scene", { line: `🗺️ ${this.location().title}${exit.days ? ` (${exit.days} day${exit.days === 1 ? "" : "s"} on the road)` : ""}`, data: { location: exit.to, days: exit.days } });
+    this.room = null; // turning back or moving on: the rooms of this place are behind you
     this.advanceDays(exit.days);
     this.processRespawns();
     this.burnLight();
@@ -736,7 +738,7 @@ export class Game {
     return { ...def, maxHp, actions, attackBonus: def.attackBonus + atk + bossAtk, damage: formatDice(d) };
   }
 
-  startCombat(encounterId: string) {
+  startCombat(encounterId: string, opts: { surprise?: boolean } = {}) {
     if (this.combat) throw new GameError("A fight is already on.");
     const enc = this.encounterDef(encounterId.trim().toLowerCase());
     if (!enc) throw new GameError(`No encounter "${encounterId}" here. Available: ${this.availableEncounters().map((e) => e.id).join(", ") || "none"}.`);
@@ -759,12 +761,14 @@ export class Game {
       ...this.monsters.map((m) => ({ kind: "monster" as const, id: m.id, init: die(20) + (m.dex ?? 1) })),
     ].sort((a, b) => b.init - a.init);
     this.combat = { encounter: enc.id, round: 1, order, index: 0 };
+    if (opts.surprise) this.rollSurprise();
     const nameOf = (id: string) => this.chars.get(id)?.name ?? this.monsters.find((m) => m.id === id)!.name;
     for (const m of this.monsters) this.emit("monster_spawn", { line: `👹 ${m.name} [${m.id}] (${m.zone} line): ${m.blurb}. HP ${m.hp}, AC ${m.ac}.`, data: { id: m.id } });
     this.emit("combat_start", {
       line: `⚔️ Combat: ${enc.title}! Initiative: ${order.map((o) => `${nameOf(o.id)} ${o.init}`).join(", ")}.`,
       data: { encounter: enc.id, order: order.map((o) => o.id) },
     });
+    this.skipSurprised();
     return `Combat started. Initiative order: ${order.map((o) => `${nameOf(o.id)} (${o.init})`).join(", ")}. The Guild Hall runs monster turns; you narrate each round.`;
   }
 
@@ -777,14 +781,53 @@ export class Game {
   /** Advance the initiative order. Returns true when a new round starts. */
   nextInCombat(): boolean {
     if (!this.combat) return false;
-    this.combat.index++;
-    if (this.combat.index >= this.combat.order.length) {
-      this.combat.index = 0;
-      this.combat.round++;
-      this.emit("combat_round", { line: `— Round ${this.combat.round} —`, data: { round: this.combat.round } });
-      return true;
+    const newRound = this.advanceIndex();
+    return this.skipSurprised() || newRound;
+  }
+
+  private advanceIndex(): boolean {
+    const c = this.combat!;
+    c.index++;
+    if (c.index < c.order.length) return false;
+    c.index = 0;
+    c.round++;
+    this.emit("combat_round", { line: `— Round ${c.round} —`, data: { round: c.round } });
+    return true;
+  }
+
+  /** Whoever was caught off guard loses round 1. */
+  private skipSurprised(): boolean {
+    let newRound = false;
+    for (let guard = 0; this.combat && this.combat.round === 1 && this.combat.surprised && this.combat.order[this.combat.index]?.kind === this.combat.surprised && guard < 50; guard++) {
+      newRound = this.advanceIndex() || newRound;
     }
-    return false;
+    return newRound;
+  }
+
+  /**
+   * Fights that start out of nowhere (wandering monsters, a room full of them) roll for surprise: the party's
+   * sharpest eyes against the monsters' stealth. Carrying a torch in the dark makes you easy to see; having none
+   * makes you easy to jump. Win by 5 and the other side loses its first round.
+   */
+  private rollSurprise() {
+    const c = this.combat!;
+    const up = this.players().filter((p) => this.conscious(p));
+    if (!up.length || !this.monsters.length) return;
+    const eyes = up.reduce((a, b) => (this.checkMod(b, "perception").mod > this.checkMod(a, "perception").mod ? b : a));
+    const party = this.d20(eyes, this.checkMod(eyes, "perception").mod);
+    const lit = !!this.location().dark && !up.some((p) => this.hasStatus(p, "In the dark"));
+    const stealth = Math.max(...this.monsters.map((m) => m.dex ?? 1));
+    const mon = die(20) + stealth + (lit ? 2 : 0);
+    const how = `${eyes.name}'s Perception ${this.fmtRoll(party)} vs the enemies' stealth d20 + ${stealth}${lit ? " + 2 (they saw the torchlight)" : ""} = ${mon}`;
+    if (party.total >= mon + 5) {
+      c.surprised = "monster";
+      this.emit("surprise", { line: `👁️ The party spots them first and gets a free round! (${how})`, data: { surprised: "monster", party: party.total, monsters: mon } });
+    } else if (mon >= party.total + 5) {
+      c.surprised = "pc";
+      this.emit("surprise", { line: `😱 Caught off guard! The enemies get a free round. (${how})`, data: { surprised: "pc", party: party.total, monsters: mon } });
+    } else {
+      this.emit("surprise", { ooc: true, line: `No one is surprised. (${how})`, data: { surprised: null, party: party.total, monsters: mon } });
+    }
   }
 
   private leaveCombat(id: string) {
@@ -1081,9 +1124,188 @@ export class Game {
     const base = fights[die(fights.length) - 1];
     const enc = { ...base, id: `wander-${this.turn}`, title: `Wandering: ${base.title}` };
     this.emit("wandering", { line: `👁️ Something finds the party: ${base.title}.`, data: { encounter: base.id } });
-    this.startRandom(enc, "wandering");
+    this.startRandom(enc, "wandering", { surprise: true });
     this.run.usedRandom = this.run.usedRandom.filter((x) => x !== enc.id);
     return enc.title;
+  }
+
+  // ─── delving: rooms, traps, hazards ────────────────────────────────────────
+
+  room: {
+    n: number;
+    title: string;
+    kind: "empty" | "trap" | "hazard" | "lone" | "person" | "mob";
+    trap?: { def: TrapDef; found: boolean; spent: boolean; hazard: boolean };
+    treasure?: { gold: number; items: Item[]; torches: number; found: boolean };
+    searched: string[];
+    person?: string;
+  } | null = null;
+
+  private delveTable(): DelveTable | undefined {
+    return (this.campaign.delve ?? []).find((d) => (d.region ?? "") === (this.location().region ?? ""));
+  }
+
+  /**
+   * GM tool: the party pushes deeper into a dark place. Moving on sets off any trap they didn't find and makes
+   * them cross any hazard; then the next room is stocked with a d6. Costs torchlight.
+   */
+  delve(): string {
+    if (this.combat) throw new GameError("Finish the fight first.");
+    const loc = this.location();
+    const table = this.delveTable();
+    if (loc.safe || !loc.dark || !table) throw new GameError(`There's nowhere deeper to go here. Delving works in dark, dangerous places${table ? "" : " that have rooms to explore"}.`);
+    const crossing = this.leaveRoom();
+    if (!this.players().some((p) => this.conscious(p))) return `${crossing}\nNo one is left standing to go on.`;
+    this.burnLight();
+    this.burnLight();
+    const delves = (this.run.delves ??= {});
+    const n = (delves[loc.id] = (delves[loc.id] ?? 0) + 1);
+    const pick = <T,>(xs: T[]) => xs[die(xs.length) - 1];
+    const roll = die(6);
+    const kind = (["empty", "trap", "hazard", "lone", "person", "mob"] as const)[roll - 1];
+    const title = pick(table.rooms);
+    const [lo, hi] = table.treasure.gold;
+    const gold = () => lo + die(hi - lo + 1) - 1;
+    this.room = { n, title, kind, searched: [] };
+    const secret: string[] = [];
+    if (kind === "empty" || (kind === "trap" && die(2) === 1)) {
+      const torches = die(3) === 1 ? die(2) : 0;
+      this.room.treasure = { gold: kind === "empty" ? Math.ceil(gold() / 2) : gold(), items: [], torches, found: false };
+      secret.push(`hidden: ${this.room.treasure.gold} gold${torches ? ` and ${torches} torch${torches > 1 ? "es" : ""}` : ""} (found with search)`);
+    }
+    if (kind === "trap") {
+      const def = pick(table.traps);
+      this.room.trap = { def, found: false, spent: false, hazard: false };
+      secret.unshift(`a hidden trap: ${def.name} (spot DC ${def.spot}, disarm DC ${def.disarm}): ${def.tell}. It goes off on whoever leads the way on, unless found.`);
+    }
+    if (kind === "hazard") {
+      const def = pick(table.hazards);
+      this.room.trap = { def, found: true, spent: false, hazard: true };
+      secret.push(`a hazard everyone must cross to go deeper: ${def.name} (${def.save.stat.toUpperCase()} save DC ${def.save.dc}). Turning back avoids it`);
+    }
+    if (kind === "person") this.room.person = pick(table.people);
+    this.emit("delve", { line: `🚪 Deeper into ${loc.title}: room ${n}, ${title}.`, data: { n, title, kind: kind === "trap" || kind === "empty" ? "quiet" : kind } });
+    if (secret.length) this.emit("room_secret", { ooc: true, line: `🤫 In this room: ${secret.join("; ")}.`, data: { kind } });
+    if (kind === "hazard") this.emit("trap", { line: `⚠️ ${this.room.trap!.def.name}: ${this.room.trap!.def.tell}`, data: { hazard: true, name: this.room.trap!.def.name, found: true } });
+    let fight = "";
+    if (kind === "lone" || kind === "mob") {
+      const monsters = kind === "lone" ? [pick(table.lone)] : pick(table.mobs);
+      const enc: RandomEncounter = { id: `delve-${loc.id}-${n}`, title: kind === "lone" ? `Something in ${title}` : `The occupants of ${title}`, kind: "fight", weight: 0, gmNotes: "", monsters,
+        gold: kind === "mob" ? gold() : undefined, loot: kind === "mob" && table.treasure.items?.length && die(2) === 1 ? [pick(table.treasure.items)] : undefined };
+      this.startRandom(enc, "deeper in", { surprise: true });
+      this.run.usedRandom = this.run.usedRandom.filter((x) => x !== enc.id);
+      fight = `\nA FIGHT has started (${monsters.map((m) => m.name).join(", ")}), with a roll for surprise. Describe them.`;
+    }
+    this.persist();
+    const brief: Record<typeof kind, string> = {
+      empty: "Nothing moves here. It's strange, and quiet.",
+      trap: "It looks quiet.",
+      hazard: "The way on is dangerous in itself.",
+      lone: "Something lives here.",
+      person: `Someone is here: ${this.room.person}. Play them.`,
+      mob: "Several somethings live here, and they have something worth taking.",
+    };
+    return `${crossing ? `${crossing}\n\n` : ""}ROOM ${n}: ${title}. (d6 = ${roll}: ${kind}) ${brief[kind]}${secret.length ? `\nFOR YOUR EYES ONLY: ${secret.join("; ")}.` : ""}${fight}\nDescribe the room without giving away what's hidden. Players find hidden things with search; they can disarm what they find. Use trigger_trap if someone blunders into the trap in the story (touches it, forces the door).`;
+  }
+
+  /** Moving on: an unfound trap goes off on whoever leads; a hazard has to be crossed by everyone. */
+  private leaveRoom(): string {
+    const r = this.room;
+    if (!r?.trap || r.trap.spent) return "";
+    const up = this.players().filter((p) => this.conscious(p));
+    if (!up.length) return "";
+    if (r.trap.hazard) return up.map((p) => this.fireTrap(r.trap!.def, p, "crossing")).join("\n");
+    if (r.trap.found) return `(The party steps carefully around the ${r.trap.def.name}.)`;
+    const front = up.filter((p) => p.zone === "front");
+    const lead = (front.length ? front : up)[die((front.length ? front : up).length) - 1];
+    r.trap.spent = true;
+    return this.fireTrap(r.trap.def, lead, "leading the way");
+  }
+
+  private fireTrap(def: TrapDef, c: Character, how: string): string {
+    const save = this.d20(c, c.stats[def.save.stat]);
+    const ok = save.total >= def.save.dc;
+    const dmg = rollDice(def.damage).total;
+    const taken = ok ? Math.floor(dmg / 2) : dmg;
+    const line = `💥 ${def.name}! ${!def.disarm ? `${c.name} crosses it` : `${c.name} sets it off (${how})`}: ${def.save.stat.toUpperCase()} save ${this.fmtRoll(save)} vs DC ${def.save.dc}: ${ok ? `half damage, ${taken}` : `${taken} damage`}${!ok && def.status ? `, and ${def.status}` : ""}.`;
+    this.emit("trap", { actor: c.id, line, data: { name: def.name, ok, dmg: taken, how, hazard: !def.disarm } });
+    if (!ok && def.status) this.addStatus(c, def.status, def.name);
+    if (taken) this.hurtChar(c, taken);
+    return line;
+  }
+
+  /** Player tool: look carefully. Perception against any hidden trap; a keen enough look also finds hidden treasure. */
+  search(actorId: string): string {
+    const c = this.char(actorId);
+    this.requireConscious(c);
+    if (this.combat) throw new GameError("Not in the middle of a fight.");
+    const r = this.room;
+    if (!r) return "You search, but there's nothing hidden here to find (search matters when the party is exploring rooms in dark places).";
+    if (r.searched.includes(c.id)) throw new GameError(`${c.name} has already searched this room.`);
+    r.searched.push(c.id);
+    this.burnLight();
+    const m = this.checkMod(c, "perception");
+    const roll = this.d20(c, m.mod);
+    const found: string[] = [];
+    if (r.trap && !r.trap.found && !r.trap.spent) {
+      if (roll.natural === 1) {
+        r.trap.spent = true;
+        this.emit("roll", { actor: c.id, line: `🔍 ${c.name} searches the room (Perception): ${this.fmtRoll(roll)}: a fumble.`, data: { natural: 1, total: roll.total, search: true } });
+        return this.fireTrap(r.trap.def, c, "searching clumsily");
+      }
+      if (roll.total >= r.trap.def.spot) {
+        r.trap.found = true;
+        found.push(`a trap: ${r.trap.def.name}. ${r.trap.def.tell}`);
+      }
+    }
+    if (r.treasure && !r.treasure.found && roll.total >= 12) {
+      r.treasure.found = true;
+      found.push(`something hidden: ${[r.treasure.gold ? `${r.treasure.gold} gold` : "", r.treasure.torches ? `${r.treasure.torches} torch${r.treasure.torches > 1 ? "es" : ""}` : ""].filter(Boolean).join(" and ")}`);
+    }
+    this.emit("roll", { actor: c.id, line: `🔍 ${c.name} searches the room (Perception): ${this.fmtRoll(roll)}: ${found.length ? `finds ${found.join("; and ")}` : "nothing they can see"}.`, data: { natural: roll.natural, total: roll.total, search: true, found: found.length } });
+    if (r.trap?.found && found.some((f) => f.startsWith("a trap"))) this.emit("trap", { actor: c.id, line: `🪤 Found: ${r.trap.def.name}. ${r.trap.def.tell}`, data: { found: true, name: r.trap.def.name } });
+    if (r.treasure?.found && found.some((f) => f.startsWith("something"))) {
+      if (r.treasure.torches) { this.run.light.torches += r.treasure.torches; this.emit("light", { line: `🔥 The party gains ${r.treasure.torches} torch${r.treasure.torches > 1 ? "es" : ""} (${this.run.light.torches} in the pack).`, data: { ...this.run.light } }); }
+      this.dropLoot({ title: r.title, gold: r.treasure.gold, loot: r.treasure.items });
+    }
+    this.persist();
+    return found.length ? `You find ${found.join("; and ")}.` : "You find nothing. (That doesn't mean there's nothing there.)";
+  }
+
+  /** Player tool: disarm a trap you've found (Sleight of Hand). Miss by 5 or more and it goes off in your hands. */
+  disarm(actorId: string): string {
+    const c = this.char(actorId);
+    this.requireConscious(c);
+    if (this.combat) throw new GameError("Not in the middle of a fight.");
+    const t = this.room?.trap;
+    if (!t || t.spent || !t.found) throw new GameError("There's no known trap here to disarm. (Search first.)");
+    if (t.hazard || !t.def.disarm) throw new GameError(`The ${t.def.name} can't be disarmed: cross it, or turn back.`);
+    const m = this.checkMod(c, "sleight of hand");
+    const roll = this.d20(c, m.mod);
+    const dc = t.def.disarm;
+    if (roll.total >= dc) {
+      t.spent = true;
+      this.emit("trap", { actor: c.id, line: `🛠️ ${c.name} disarms the ${t.def.name} (Sleight of Hand): ${this.fmtRoll(roll)} vs DC ${dc}.`, data: { disarmed: true, name: t.def.name } });
+      this.grantXp(c.id, this.isGrim() ? 2 : 10, `disarming the ${t.def.name}`, "kill");
+      this.persist();
+      return "Disarmed.";
+    }
+    if (roll.total <= dc - 5) {
+      t.spent = true;
+      this.emit("roll", { actor: c.id, line: `🛠️ ${c.name} tries to disarm the ${t.def.name} (Sleight of Hand): ${this.fmtRoll(roll)} vs DC ${dc}: it goes off!`, data: { natural: roll.natural, total: roll.total } });
+      return this.fireTrap(t.def, c, "fumbling the disarm");
+    }
+    this.emit("roll", { actor: c.id, line: `🛠️ ${c.name} tries to disarm the ${t.def.name} (Sleight of Hand): ${this.fmtRoll(roll)} vs DC ${dc}: not yet.`, data: { natural: roll.natural, total: roll.total } });
+    return "Not yet. You can try again, carefully.";
+  }
+
+  /** GM tool: someone blunders into the room's trap in the story. */
+  triggerTrap(charId: string): string {
+    const t = this.room?.trap;
+    if (!t || t.spent) throw new GameError("There's no live trap in this room.");
+    const c = this.char(charId);
+    if (!t.hazard) t.spent = true;
+    return this.fireTrap(t.def, c, "blundering into it");
   }
 
   // ─── random encounters and probes ──────────────────────────────────────────
@@ -1129,7 +1351,7 @@ export class Game {
   }
 
   /** Also a GM tool, so a random encounter can be forced for testing or pacing. */
-  startRandom(enc: RandomEncounter, when = "") {
+  startRandom(enc: RandomEncounter, when = "", opts: { surprise?: boolean } = {}) {
     if (this.activeRandom) this.resolveEncounter("interrupted");
     this.run.usedRandom.push(enc.id);
     this.activeRandom = { enc, turn: this.turn, engaged: new Set() };
@@ -1156,7 +1378,7 @@ export class Game {
     // Fights on the road don't wait for permission.
     if (enc.monsters?.length && !this.combat) {
       this.emit("status", { line: `⚠️ ${enc.title}!`, data: { ambush: enc.id } });
-      this.startCombat(enc.id);
+      this.startCombat(enc.id, opts);
     }
   }
 

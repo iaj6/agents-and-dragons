@@ -1,5 +1,5 @@
 import { CADENCE, GRUB, PELL, REPLACEMENTS, THESSALY } from "../party.js";
-import type { Campaign, Item, MonsterDef, RandomEncounter } from "../types.js";
+import type { Campaign, DelveTable, Item, MonsterDef, RandomEncounter, TrapDef } from "../types.js";
 
 // ─── bestiary ───────────────────────────────────────────────────────────────
 
@@ -140,6 +140,47 @@ const RANDOM: RandomEncounter[] = [
     gmNotes: "Two erased people drift out of the silt. They aren't evil; they're lost, and they grab. A party that says their names (if it can learn them) can end this without a fight." },
 ];
 
+// ─── delving: what's in the next room ───────────────────────────────────────
+// Rolled by the GM's delve tool in dark, dangerous places. Traps are hidden until someone searches; hazards are
+// obvious and have to be crossed (or avoided by turning back).
+
+const trap = (t: TrapDef) => t;
+const SNAP_LINE = trap({ id: "snap-line", name: "Snap-Line", spot: 13, disarm: 12, save: { stat: "dex", dc: 12 }, damage: "1d6", tell: "fishing line at ankle height, strung to a rack of rusted gutting hooks" });
+const FALLING_SALT = trap({ id: "falling-salt", name: "Hanging Salt Block", spot: 12, disarm: 14, save: { stat: "dex", dc: 13 }, damage: "2d4", tell: "a salt block the size of a cart, held up by one rotten prop" });
+const INK_POOL = trap({ id: "ink-pool", name: "Ink Pool", spot: 14, disarm: 13, save: { stat: "wis", dc: 13 }, damage: "1d4", status: "Hallucinating", tell: "a black puddle that doesn't ripple when the water around it does; step in it and you forget where you are" });
+const LEECH_NEST = trap({ id: "leech-nest", name: "Leech Nest", spot: 12, disarm: 11, save: { stat: "con", dc: 12 }, damage: "1d4", status: "Poisoned", tell: "a crack in the floor, packed with pale, sleeping eels" });
+const BAD_AIR = trap({ id: "bad-air", name: "Bad Air", spot: 0, save: { stat: "con", dc: 12 }, damage: "1d4", status: "Poisoned", tell: "the air goes thin and sweet, and the torch flame shrinks to a bead" });
+const SUMP = trap({ id: "sump", name: "The Sump", spot: 0, save: { stat: "str", dc: 12 }, damage: "1d4", tell: "the only way on is underwater: a flooded passage you'll have to swim through on one breath" });
+const SLICK_STAIR = trap({ id: "slick-stair", name: "Slick Stair", spot: 0, save: { stat: "dex", dc: 11 }, damage: "1d6", tell: "stone steps furred with weed and wet, going down steeply into the black" });
+const RISING_TIDE = trap({ id: "rising-tide", name: "Rising Tide", spot: 0, save: { stat: "str", dc: 12 }, damage: "1d4", tell: "the sea is coming back in through the cave, fast, and the way on is across a channel filling with it" });
+
+const DELVE_BELOW: DelveTable = {
+  region: "below",
+  rooms: ["a drowned chapel, the pews still bolted down", "a salt-choked cistern", "a gallery scratched with tally marks", "a collapsed stack of the Index's overflow", "an air pocket with a dead diver's camp", "a tide cave full of floating paper boats", "a white stair that goes nowhere", "a flooded kitchen, the table still set"],
+  traps: [SNAP_LINE, FALLING_SALT, INK_POOL, LEECH_NEST],
+  hazards: [BAD_AIR, SUMP, SLICK_STAIR],
+  lone: [SILT_GHOST, REDACTED_SCHOLAR, BLANK_KNIGHT],
+  mobs: [[MEMORY_LEECH, MEMORY_LEECH, MEMORY_LEECH], [SILT_GHOST, SILT_GHOST], [REDACTED_SCHOLAR, SILT_GHOST], [BLANK_ACOLYTE, BLANK_ACOLYTE]],
+  people: [
+    "a pearl diver who forgot to surface forty years ago; she knows a shortcut and doesn't know what year it is",
+    "a Choir hermit keeping a lamp lit for someone who isn't coming back; she'll trade a torch for a story",
+    "a Redacted Scholar who ran away from the Index and wants to be taken to the Quiet Harbor",
+    "a child from the Quiet Harbor, lost, cheerfully unafraid of anything",
+    "Archive smugglers hauling salt blocks, who'll sell torches (3 gold each) and ask no questions",
+  ],
+  treasure: { gold: [6, 40], items: [ITEMS.locket, ITEMS.bell, ITEMS.spectacles] },
+};
+
+const DELVE_COAST: DelveTable = {
+  rooms: ["a smugglers' cave with a rotten boat", "a tide-pool chamber", "a wreckers' lookout", "a gull-bone nest", "a cave of drying nets", "a sea-arch with a shrine to nobody"],
+  traps: [SNAP_LINE, FALLING_SALT],
+  hazards: [RISING_TIDE, SLICK_STAIR],
+  lone: [WRECKER, BLANK_HOUND],
+  mobs: [[WRECKER, WRECKER_SLINGER], [BLANK_HOUND, BLANK_HOUND]],
+  people: ["a wrecker's widow, who knows where her husband hid the lanterns", "a lost Archive courier with a satchel she won't open"],
+  treasure: { gold: [3, 25], items: [ITEMS.collar, ITEMS.gloves] },
+};
+
 // ─── the campaign ───────────────────────────────────────────────────────────
 
 export const UNWRITTEN_COAST: Campaign = {
@@ -185,6 +226,7 @@ character remembers.`,
   startingLoot: [ITEMS.ledger],
   randomTable: RANDOM,
   randomChance: 0.65,
+  delve: [DELVE_BELOW, DELVE_COAST],
   clock: [
     { day: 3, text: "Blank Hounds now hunt the Salt Road in packs. The Redactor's servants grow bolder." },
     { day: 5, text: "Brinecombe begins forgetting again, from the edges in. The Censor's reach is spreading." },

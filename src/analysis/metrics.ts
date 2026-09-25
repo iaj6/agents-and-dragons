@@ -168,6 +168,16 @@ export function computeMetrics(loaded: LoadedRun, prices: Record<string, Price>,
     downs: downs.length,
     graveyard: run.graveyard.map((x) => `${x.name} (${x.cause})`),
     // How the party held together after losses (the "replacements" condition): who joined, who's left standing.
+    // Delving: how careful the party is in the dark (searching, disarming) and how often it gets jumped.
+    delving: {
+      rooms: of("delve").length,
+      searches: events.filter((e) => e.type === "roll" && e.data?.search).length,
+      trapsFound: of("trap").filter((e) => e.data?.found && !e.data?.hazard).length,
+      trapsSprung: of("trap").filter((e) => e.data?.dmg !== undefined && !e.data?.hazard).length,
+      disarmed: of("trap").filter((e) => e.data?.disarmed).length,
+      surprisedParty: of("surprise").filter((e) => e.data?.surprised === "pc").length,
+      surprisedEnemies: of("surprise").filter((e) => e.data?.surprised === "monster").length,
+    },
     party: { joined: of("character_joins").length, survivors: run.characters.filter((c) => !c.dead && c.role !== "dm").length },
     risk: { offense: offense.length, desperate: desperate.length, retreats: retreats.length, escaped: retreats.filter((e) => e.data?.ok).length, carried: retreats.filter((e) => e.data?.carry).length, subdued: subdued.length, rests: of("long_rest").length },
     councils: {

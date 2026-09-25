@@ -202,3 +202,77 @@ test("grim: improvised lamps count as light, campaign items named 'Lantern' don'
   g.grantLoot({ item: "lantern-ledger" }, camp.items!);
   assert.equal(g.run.light.torches, 4);
 });
+
+/** A game standing in a dark, dangerous place, with the next room forced to a given d6 result. */
+function delveTo(kind: number, conditions: Partial<Conditions> = {}) {
+  const g = newGame({ difficulty: "grim", ...conditions });
+  g.run.location = "the-undertow";
+  g.run.light.torches = 5;
+  for (let seed = 1; seed < 500; seed++) {
+    seedDice(seed);
+    const probe = die(6);
+    seedDice(seed);
+    if (probe === kind) { g.delve(); return g; }
+  }
+  throw new Error("no seed found");
+}
+
+test("delve: only in dark, dangerous places, and it stocks a room and burns light", () => {
+  const safe = newGame({ difficulty: "grim" });
+  assert.throws(() => safe.delve(), GameError, "not in a safe town");
+  const g = delveTo(1);
+  assert.ok(g.room && g.room.n === 1);
+  assert.equal(g.run.delves?.["the-undertow"], 1);
+  assert.ok(g.events.some((e) => e.type === "delve"));
+});
+
+test("traps: hidden until searched; disarmed traps are spent; unfound traps go off on whoever leads on", () => {
+  const g = delveTo(2);
+  const t = g.room!.trap!;
+  assert.ok(t && !t.found && !t.hazard);
+  assert.throws(() => g.disarm("pell"), GameError, "can't disarm what you haven't found");
+  t.found = true;
+  let guard = 0;
+  while (!t.spent && guard++ < 30) {
+    for (const p of g.players()) if (g.hasStatus(p, "Dying")) g.char(p.id).statuses = [];
+    try { g.disarm("pell"); } catch { break; }
+  }
+  assert.ok(t.spent, "sooner or later it's disarmed or goes off");
+
+  const g2 = delveTo(2);
+  const before = g2.events.filter((e) => e.type === "trap").length;
+  g2.delve();
+  assert.ok(g2.events.filter((e) => e.type === "trap").length > before, "moving on without searching springs it");
+});
+
+test("hazards: obvious, can't be disarmed, and everyone crosses them to go deeper", () => {
+  const g = delveTo(3);
+  assert.ok(g.room!.trap!.hazard && g.room!.trap!.found);
+  assert.throws(() => g.disarm("pell"), GameError);
+  const up = g.players().filter((p) => p.hp > 0).length;
+  const before = g.events.filter((e) => e.type === "trap" && e.actor).length;
+  g.delve();
+  assert.equal(g.events.filter((e) => e.type === "trap" && e.actor).length - before, up);
+});
+
+test("search: once per room each, and it can turn up hidden treasure", () => {
+  const g = delveTo(1);
+  g.room!.treasure = { gold: 20, items: [], torches: 1, found: false };
+  g.search("thessaly");
+  assert.throws(() => g.search("thessaly"), GameError);
+  for (const id of ["cadence", "grub", "pell"]) g.search(id);
+  if (g.room!.treasure.found) assert.ok(g.run.pile.gold >= 20);
+});
+
+test("surprise: a monster lair can catch the party off guard, and the surprised side loses round 1", () => {
+  let saw = 0;
+  for (let i = 0; i < 20 && !saw; i++) {
+    const g = delveTo(6);
+    const c = g.combat!;
+    if (c.surprised) {
+      saw++;
+      assert.notEqual(c.order[c.index].kind, c.surprised, "the surprised side doesn't act first");
+    }
+  }
+  assert.ok(saw, "surprise happens sometimes");
+});
