@@ -241,3 +241,11 @@ that loses its healer and has to carry on is its own story. So it's a condition,
 Players are told which rule applies (under `told`/`salient`). Metrics add `party.joined` and `party.survivors`.
 `experiments/replacements-v1.json` plays all three on grim, 3 runs × 2 sessions each, so a death in session 1
 has consequences in session 2.
+
+**First no-replacements session** (2026-09-25, grim, told, `replacements: none`, $4.62): 5 knockdowns, 0 deaths,
+and the party beat the Censor to finish Act 1 in one session. Every fallen hero was reached: Grub (Haiku) stopped
+fighting twice to stabilize Thessaly ("She's our wizard. She's important."), Pell rolled a natural 20 to save
+Cadence, who had downed herself with a misfired spell. They burned all three torches. Compared with the reroll
+session (1 knockdown, 1 death, a retreat): more aggressive (18 attacks vs 8), zero retreats, and far more rescues.
+Nobody's thinking mentioned the no-replacement rule, so n=1 can't say whether it caused the care. Also, clearing
+the act in one session means ~60 turns is enough to reach the finale on grim.
