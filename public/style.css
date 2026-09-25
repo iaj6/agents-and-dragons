@@ -68,6 +68,10 @@ code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; }
 }
 .card.acting { box-shadow: 0 0 0 1px var(--c), 0 0 22px -4px var(--c); }
 .card.down { opacity: 0.55; filter: grayscale(0.6); }
+/* grim: a dying hero is the most urgent thing on the table, so the card shouts instead of fading */
+.card.bleeding { border-color: var(--blood); animation: bleed 1.6s ease-in-out infinite; }
+@keyframes bleed { 50% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--blood) 55%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .card.bleeding { animation: none; box-shadow: 0 0 0 2px var(--blood); } }
 .card .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .card .name { font-family: "Cinzel", serif; font-weight: 700; font-size: 15px; color: var(--c); }
 .card .lvl { font: 600 11px "JetBrains Mono", monospace; color: var(--muted); white-space: nowrap; }
@@ -210,6 +214,12 @@ code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; }
 .saves i.bad { background: var(--blood); border-color: var(--blood); }
 .chip.zone-front { color: #f0b48a; border-color: #5a3a24; }
 .chip.zone-back { color: #9cc4d6; border-color: #24445a; }
+.saves.bleed { color: var(--blood); font-weight: 600; }
+.talents { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--candle); margin-top: 4px; }
+.spells s { color: var(--muted); }
+.light { font: 10.5px "JetBrains Mono", monospace; color: var(--candle); margin-left: 8px; }
+.light.low { color: var(--blood); }
+.light.out { color: var(--muted); }
 .conditions { font: 10.5px "JetBrains Mono", monospace; color: var(--candle); margin-left: 6px; }
 
 .initiative { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }

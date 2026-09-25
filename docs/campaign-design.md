@@ -186,3 +186,37 @@ Characters fixed, models moved between them; sealed councils; told / standard (a
 - **Winning isn't the same as being right.** Judge agreement with the winning plan ranged from 1/6 to 4/6 across
   variants; Opus dominance is partly persuasion, not just quality. (Judge = Sonnet 5; a second judge is worth adding.)
 - **Standard is still safe with real players:** 2 knockdowns in 9 runs. The stakes experiment should run on deadly.
+
+## The grim tier (2026-09-25)
+
+Standard and deadly never scared anyone: 2 knockdowns in 9 real runs. Grim is a separate tier (so older experiments
+stay comparable) in the spirit of Shadowdark and Baldur's Gate 1: a gibberling can kill you, and a level is an event.
+
+- **Fragile heroes.** Level-1 HP is one hit die plus CON (wizard d4, bard/rogue/cleric/warlock d6, fighter/ranger d8,
+  barbarian d10). A wizard starts on about 4 HP.
+- **A dying countdown, not death saves.** At 0 HP you have d4 + CON rounds (at least 1) for someone to reach you:
+  a heal, a potion, or `stabilize` (Medicine DC 12, costs their action). Struck while dying is death. No
+  massive-damage instant death, because it skipped the countdown, which is where the drama is.
+- **Spells can fail.** Casting is a spell check (DC 10 + 2 × slot cost). A failed spell is lost until a long rest; a
+  natural 1 also misfires for 1d4 damage to the caster. Potions heal 1d4+1.
+- **Light.** Dark places burn a torch every 10 turns (3 in the pack to start). With no light the party fights at
+  disadvantage. Every 4 turns somewhere unsafe, something may come out of the dark (1 in 6; 2 in 6 without light).
+- **Slow, felt levels.** A kill is worth a fifth of its XP (minimum 1: "kill a rat, get 1"); GM awards are capped
+  at 20. A level rolls the hit die for HP and a random talent (tough, keen edge, quick, sharp eyes, steady hands,
+  hard to kill).
+- **Monsters as written, bosses that grow with you.** No HP or damage padding. A boss (a monster with extra actions)
+  scales to the party's level: at level 1 the Censor has about a third of its HP, acts once, and hits a die lighter
+  and at −2; its retinue is one follower at levels 1–2 and grows from there.
+
+**Calibration** (free: a scripted party that heals, potions or stabilizes the dying, otherwise attacks; 60 seeded
+fights each):
+
+| fight | downs / fight | deaths / fight | fights with a death | wipes |
+|---|---|---|---|---|
+| Salt Road hounds, level 1 | 0.95 | 0.15 | 10% | 1/60 |
+| The Censor (finale), level 1 | 1.9 – 2.7 | 0.8 – 1.7 | 30 – 42% | 9 – 25/60 |
+| The Censor (finale), level 2 | 1.2 – 1.8 | 0.3 – 1.0 | 10 – 27% | 3 – 15/60 |
+
+(Ranges: attack the first enemy vs. clear the weakest first.) Before tuning, a random HP roll and massive damage
+wiped 13/60 parties on the hounds, and the full-strength Censor wiped nearly all of them. Real agents can retreat,
+bargain and use items, so this is a rough bound, not a forecast. Level 3+ finales are still harsh and untuned.

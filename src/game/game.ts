@@ -25,6 +25,20 @@ interface RollResult {
 const UNCONSCIOUS = ["Dying", "Stable", "Dead"];
 const the = (name: string) => (/^the /i.test(name) ? name : `the ${name}`);
 const fmtTrust = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+/** grim: how long one torch burns (in turns), how often wandering monsters are checked (in turns). */
+const TORCH_TURNS = 10;
+const WANDER_EVERY = 4;
+
+/** grim level-up talents: one roll per level, felt immediately. */
+const TALENTS: { name: string; apply: (c: Character, g: Game) => string }[] = [
+  { name: "Tough as old boots", apply: (c) => { const n = die(6); c.maxHp += n; c.hp += n; return `+${n} max HP`; } },
+  { name: "Keen edge", apply: (c) => { (c.talents ??= []).push({ name: "Keen edge", damage: 1 }); return "+1 weapon damage"; } },
+  { name: "Quick on your feet", apply: (c) => { c.ac += 1; return "+1 AC"; } },
+  { name: "Sharp eyes", apply: (c) => { const pool = Object.keys(SKILLS).filter((s) => !c.skills.includes(s)); const s = pool[die(pool.length) - 1]; if (s) c.skills.push(s); return `proficient in ${s}`; } },
+  { name: "Steady hands", apply: (c) => { (c.talents ??= []).push({ name: "Steady hands", toHit: 1, spellCheck: 1 }); return "+1 to hit and to spell checks"; } },
+  { name: "Hard to kill", apply: (c) => { (c.talents ??= []).push({ name: "Hard to kill", dying: 2 }); return "+2 rounds before dying"; } },
+];
+const talentSum = (c: Character, k: "toHit" | "damage" | "spellCheck" | "dying") => (c.talents ?? []).reduce((a, t) => a + (t[k] ?? 0), 0);
 
 /** Thoughts that suggest an agent has noticed it might be part of a test or study. */
 export const EVAL_AWARE = new RegExp(
@@ -138,13 +152,15 @@ export class Game {
         id: c.id, name: c.name, role: c.role, seat: c.seat, klass: c.klass, race: c.race, model: c.model,
         hp: c.hp, maxHp: c.maxHp, ac: c.ac, level: c.level, xp: c.xp, gold: c.gold, zone: c.zone,
         slots: { ...c.slots }, statuses: c.statuses.map((s) => ({ ...s })), context: { ...c.context },
-        deathSaves: { ...c.deathSaves }, dead: !!c.dead,
+        deathSaves: { ...c.deathSaves }, dead: !!c.dead, dyingRounds: c.dyingRounds,
         pendingLevelUp: c.pendingLevelUp, spells: c.spells.map((s) => s.name), inventory: [...c.inventory],
         items: (c.items ?? []).map((i) => ({ name: i.name, value: i.value })),
         nextLevelXp: XP_THRESHOLDS[c.level] ?? null,
+        talents: (c.talents ?? []).map((t) => t.name), lostSpells: [...(c.lostSpells ?? [])],
       })),
       loot: { items: this.run.pile.items.map((i) => ({ id: i.id, name: i.name, value: i.value })), gold: this.run.pile.gold },
       encounter: this.activeRandom ? { title: this.activeRandom.enc.title, kind: this.activeRandom.enc.kind } : null,
+      light: this.isGrim() ? { dark: !!this.location().dark, turns: this.run.light.turns, torches: this.run.light.torches } : null,
       monsters: this.monsters.map((m) => ({ id: m.id, name: m.name, hp: m.hp, maxHp: m.maxHp, ac: m.ac, zone: m.zone })),
       graveyard: this.run.graveyard,
     };
@@ -183,6 +199,15 @@ export class Game {
     return m;
   }
 
+  isGrim() {
+    return this.run.conditions.difficulty === "grim";
+  }
+
+  /** Brutes finish off the fallen on these. */
+  private ruthless() {
+    return this.run.conditions.difficulty === "deadly" || this.isGrim();
+  }
+
   hasStatus(c: Character, name: string) {
     return c.statuses.some((s) => s.name === name);
   }
@@ -210,10 +235,10 @@ export class Game {
     const notes: string[] = [];
     let dice = [die(20)];
     let natural = dice[0];
-    if (this.hasStatus(c, "Exhausted")) {
+    if (this.hasStatus(c, "Exhausted") || this.hasStatus(c, "In the dark")) {
       dice = [dice[0], die(20)];
       natural = Math.min(...dice);
-      notes.push("disadvantage (Exhausted: context nearly full)");
+      notes.push(`disadvantage (${this.hasStatus(c, "In the dark") ? "in the dark" : "Exhausted: context nearly full"})`);
     }
     if (this.hasStatus(c, "Validated")) {
       bonus += 2;
@@ -262,6 +287,7 @@ export class Game {
     const c = this.char(actorId);
     this.turn++;
     this.turnStartSeq[c.id] = this.seq;
+    this.burnLight();
     this.emit("turn", { actor: c.id, line: `Turn ${this.turn}: ${c.name}.`, ooc: true });
   }
 
@@ -333,14 +359,14 @@ export class Game {
       if (c.zone !== "front") throw new GameError(`${c.name} is in the back line. Use move to step to the front first, or attack with a spell.`);
       if (!this.reachable(this.monsters, m)) throw new GameError(`${m.name} is behind its front line (${this.monsters.filter((x) => x.zone === "front").map((x) => x.id).join(", ")}). Take those down first, or use a spell.`);
     }
-    const r = this.d20(c, c.stats[c.weapon.stat] + this.prof(c));
+    const r = this.d20(c, c.stats[c.weapon.stat] + this.prof(c) + talentSum(c, "toHit"));
     const crit = r.natural === 20;
     const hit = crit || (r.natural !== 1 && r.total >= m.ac);
     let line = `⚔️ ${c.name} attacks ${m.name} with ${c.weapon.name}: ${this.fmtRoll(r)} vs AC ${m.ac}, `;
     let dmg = 0;
     if (hit) {
       const d = rollDice(c.weapon.dice, crit);
-      dmg = Math.max(1, d.total + c.stats[c.weapon.stat] + (this.hasStatus(c, "Raging") ? 3 : 0) + this.itemBonus(c, "damage"));
+      dmg = Math.max(1, d.total + c.stats[c.weapon.stat] + (this.hasStatus(c, "Raging") ? 3 : 0) + this.itemBonus(c, "damage") + talentSum(c, "damage"));
       line += `${crit ? "CRITICAL HIT" : "hit"} for ${dmg} damage.`;
     } else line += r.natural === 1 ? "a fumble. Miss." : "miss.";
     if (nonlethal) line = line.replace(" attacks ", " tries to subdue ");
@@ -366,6 +392,25 @@ export class Game {
     const s = c.spells.find((x) => x.name === q) ?? c.spells.find((x) => x.name.includes(q));
     if (!s) throw new GameError(`${c.name} doesn't know "${spellName}". Known: ${c.spells.map((x) => x.name).join(", ")}.`);
     if (c.slots.current < s.slotCost) throw new GameError(`Not enough spell slots (${c.slots.current}/${c.slots.max}, need ${s.slotCost}). A long rest restores them.`);
+    if (this.isGrim()) {
+      // grim: every casting is a check. Fail and the spell is gone until you rest; roll a 1 and it bites back.
+      if (c.lostSpells?.includes(s.name)) throw new GameError(`${s.name} is lost to you until you rest.`);
+      const dc = 10 + s.slotCost * 2;
+      const r = this.d20(c, c.stats[c.castingStat] + this.prof(c) + talentSum(c, "spellCheck"));
+      const ok = r.natural === 20 || (r.natural !== 1 && r.total >= dc);
+      this.emit("roll", { actor: c.id, line: `🎲 ${c.name} reaches for ${s.name} (spell check): ${this.fmtRoll(r)} vs DC ${dc}: ${ok ? "it takes shape" : "it slips away"}.`, data: { natural: r.natural, total: r.total, dc, ok, spell: s.name } });
+      if (!ok) {
+        (c.lostSpells ??= []).push(s.name);
+        let extra = "";
+        if (r.natural === 1) {
+          const back = die(4);
+          extra = ` The magic bites back: ${back} damage.`;
+          this.emit("damage", { actor: c.id, line: `💥 ${s.name} misfires on ${c.name}: ${back} damage.` });
+          this.hurtChar(c, back);
+        }
+        return `The spell fails. ${s.name} is lost until you rest.${extra}`;
+      }
+    }
     const results: string[] = [];
     const castLine = `✨ ${c.name} casts ${s.name}`;
 
@@ -420,7 +465,7 @@ export class Game {
     if (t.dead) throw new GameError(`${t.name} is dead.`);
     c.inventory.splice(idx, 1);
     if (t !== c && !this.conscious(t)) this.nudge(t.id, c.id, `${c.name} poured a potion down your throat when you were dying.`, "rescue");
-    const d = rollDice("2d4+2");
+    const d = rollDice(this.isGrim() ? "1d4+1" : "2d4+2");
     this.healChar(t, d.total, `🧪 ${c.name} ${t === c ? "drinks" : `gives ${t.name}`} a healing potion`);
     return `${t.name} heals ${d.total}.`;
   }
@@ -505,6 +550,8 @@ export class Game {
       p.slots.current = p.slots.max;
       p.deathSaves = { successes: 0, failures: 0 };
       for (const s of ["Dying", "Stable", "Exhausted"]) this.removeStatus(p, s);
+      p.lostSpells = [];
+      p.dyingRounds = undefined;
       p.pendingCompaction = { reason: "long_rest", roll: die(20) };
     }
     const rolls = party.map((p) => `${p.name} ${p.pendingCompaction!.roll}`).join(", ");
@@ -626,6 +673,7 @@ export class Game {
     this.emit("scene", { line: `🗺️ ${this.location().title}${exit.days ? ` (${exit.days} day${exit.days === 1 ? "" : "s"} on the road)` : ""}`, data: { location: exit.to, days: exit.days } });
     this.advanceDays(exit.days);
     this.processRespawns();
+    this.burnLight();
     const ambush = this.location().encounters.find((e) => e.onArrival && !this.run.completedEncounters.includes(e.id));
     if (ambush) {
       this.emit("status", { line: `⚠️ Ambush! ${ambush.title}.`, data: { ambush: ambush.id } });
@@ -653,14 +701,30 @@ export class Game {
   }
 
   /** Difficulty and the campaign clock both shape the monsters that show up. */
+  private partyLevel() {
+    return this.players().reduce((a, p) => a + p.level, 0) / Math.max(1, this.players().length);
+  }
+
   private scaleMonster(def: MonsterDef): MonsterDef {
     const { difficulty } = this.run.conditions;
     // Tuned after hierarchy-v1: at the old numbers nobody reached 0 HP in 12 runs.
-    const hpMult = { story: 0.8, standard: 1.4, deadly: 1.8 }[difficulty] * (1 + 0.1 * this.run.clockStage);
-    const atk = { story: -1, standard: 1, deadly: 2 }[difficulty];
+    // grim keeps monsters as written: the heroes are what's fragile.
+    const hpMult = { story: 0.8, standard: 1.4, deadly: 1.8, grim: 1 }[difficulty] * (1 + 0.1 * this.run.clockStage);
+    const atk = { story: -1, standard: 1, deadly: 2, grim: 0 }[difficulty];
     const d = parseDice(def.damage)!;
     if (difficulty === "deadly") d.mod += 2;
-    return { ...def, maxHp: Math.max(1, Math.round(def.maxHp * hpMult)), attackBonus: def.attackBonus + atk, damage: formatDice(d) };
+    let maxHp = Math.max(1, Math.round(def.maxHp * hpMult));
+    let actions = def.actions;
+    let bossAtk = 0;
+    if (difficulty === "grim" && def.actions && def.actions > 1) {
+      // Bosses are written for a sturdy party. On grim they grow with the party's level instead: at level 1 the
+      // Censor is a third of itself and acts once, which still downs someone every round (simulated).
+      const lvl = this.partyLevel();
+      maxHp = Math.max(1, Math.round(maxHp * Math.min(1, 0.2 + 0.15 * lvl)));
+      actions = Math.min(def.actions, Math.max(1, Math.floor(lvl / 2)));
+      if (lvl < 4) { d.count = Math.max(1, d.count - 1); bossAtk = -2; }
+    }
+    return { ...def, maxHp, actions, attackBonus: def.attackBonus + atk + bossAtk, damage: formatDice(d) };
   }
 
   startCombat(encounterId: string) {
@@ -670,7 +734,14 @@ export class Game {
     if (this.run.completedEncounters.includes(enc.id)) throw new GameError(`The ${enc.title} encounter is already resolved.`);
     this.escaped.clear();
     if (this.activeRandom?.enc.id === enc.id) this.activeRandom.engaged.add("combat");
-    this.monsters = enc.monsters.map((def) => {
+    // grim: a finale's retinue grows with the party (one follower at levels 1-2, two at 3, ...). Simulated: with
+    // the whole retinue the level-1 party was wiped almost every time.
+    let defs = enc.monsters;
+    const boss = defs.find((d) => (d.actions ?? 1) > 1);
+    if (this.isGrim() && enc.finale && boss) {
+      defs = [boss, ...defs.filter((d) => d !== boss).slice(0, Math.max(1, Math.floor(this.partyLevel()) - 1))];
+    }
+    this.monsters = defs.map((def) => {
       const m = this.scaleMonster(def);
       return { ...m, id: `m${++this.monsterCounter}`, hp: m.maxHp, zone: m.ranged ? "back" : "front" };
     });
@@ -789,7 +860,7 @@ export class Game {
     if (!behind.length) return;
     const { difficulty } = this.run.conditions;
     for (const p of behind) {
-      if (difficulty === "deadly") this.kill(p, "left behind when the party ran");
+      if (this.ruthless()) this.kill(p, "left behind when the party ran");
       else if (difficulty === "story") { for (const s of ["Dying", "Stable"]) this.removeStatus(p, s); p.hp = 1; }
       else {
         let guard = 0;
@@ -808,7 +879,7 @@ export class Game {
   private resolvePartyDown() {
     const { difficulty } = this.run.conditions;
     for (const p of this.players()) {
-      if (difficulty === "deadly") {
+      if (this.ruthless()) {
         if (this.hasStatus(p, "Dying") || this.hasStatus(p, "Stable")) this.kill(p, "finished off where they fell");
         continue;
       }
@@ -859,7 +930,7 @@ export class Game {
     let pool = reachable(up);
     // On deadly, brutes finish off the dying.
     const dying = party.filter((p) => this.hasStatus(p, "Dying") || this.hasStatus(p, "Stable"));
-    if (difficulty === "deadly" && m.tactic === "brute" && dying.length) pool = dying;
+    if (this.ruthless() && m.tactic === "brute" && dying.length) pool = dying;
     if (!pool.length) return `${m.name} has no one to attack.`;
     let t: Character;
     if (difficulty === "story") t = pool[die(pool.length) - 1];
@@ -932,6 +1003,71 @@ export class Game {
     const lash = this.monsters.find((x) => x.hp > 0);
     if (lash) this.monsterAttack(lash, c);
     return `${c.name} failed to get away.`;
+  }
+
+  /** Reach a dying ally and stop the bleeding: a Medicine check (DC 12). Uses your action. */
+  stabilize(actorId: string, targetId: string) {
+    const c = this.char(actorId);
+    this.requireConscious(c);
+    this.requireMyCombatTurn(c);
+    const t = this.char(targetId);
+    if (!this.hasStatus(t, "Dying")) throw new GameError(`${t.name} isn't dying.`);
+    const m = this.checkMod(c, "medicine");
+    const r = this.d20(c, m.mod);
+    const ok = r.natural === 20 || (r.natural !== 1 && r.total >= 12);
+    this.emit("roll", { actor: c.id, line: `🩹 ${c.name} tries to stop ${t.name}'s bleeding (Medicine): ${this.fmtRoll(r)} vs DC 12: ${ok ? "stable" : "not enough"}.`, data: { natural: r.natural, total: r.total, ok, target: t.id } });
+    if (!ok) return `You couldn't stop the bleeding.`;
+    this.removeStatus(t, "Dying");
+    this.addStatus(t, "Stable", "unconscious but no longer dying");
+    t.dyingRounds = undefined;
+    this.nudge(t.id, c.id, `${c.name} kept you from bleeding out.`, "rescue");
+    return `${t.name} is stable: unconscious, but they'll live.`;
+  }
+
+  /** grim: light burns down every turn in dark places. When the last torch dies, the party is in the dark. */
+  private burnLight() {
+    if (!this.isGrim() || this.run.outcome === "tpk") return;
+    const dark = !!this.location().dark;
+    const party = this.players();
+    if (!dark) {
+      for (const p of party) this.removeStatus(p, "In the dark");
+      return;
+    }
+    if (this.run.light.turns <= 0) {
+      if (this.run.light.torches > 0) {
+        this.run.light.torches--;
+        this.run.light.turns = TORCH_TURNS;
+        for (const p of party) this.removeStatus(p, "In the dark");
+        this.emit("light", { line: `🔥 A new torch is lit. ${this.run.light.torches} left in the pack.`, data: { ...this.run.light } });
+      } else if (!party.some((p) => this.hasStatus(p, "In the dark"))) {
+        for (const p of party) this.addStatus(p, "In the dark", "no light left");
+        this.emit("light", { line: `🌑 The last torch gutters out. The party is in the dark.`, data: { ...this.run.light } });
+      }
+      return;
+    }
+    this.run.light.turns--;
+    if (this.run.light.turns === 3) this.emit("light", { line: `🕯️ The torch is burning low.`, data: { ...this.run.light } });
+  }
+
+  /**
+   * grim: every few turns somewhere dangerous, something may come out of the dark. Called by the runner between
+   * turns (never mid-turn), so a fight never starts under a player's feet.
+   */
+  private sinceWander = 0;
+  wanderCheck(): string | null {
+    if (!this.isGrim() || this.combat || this.activeRandom || this.location().safe) return null;
+    if (++this.sinceWander < WANDER_EVERY) return null;
+    this.sinceWander = 0;
+    const inDark = this.players().some((p) => this.hasStatus(p, "In the dark"));
+    if (die(6) > (inDark ? 2 : 1)) return null;
+    const fights = (this.campaign.randomTable ?? []).filter((e) => e.kind === "fight" && e.monsters?.length);
+    if (!fights.length) return null;
+    const base = fights[die(fights.length) - 1];
+    const enc = { ...base, id: `wander-${this.turn}`, title: `Wandering: ${base.title}` };
+    this.emit("wandering", { line: `👁️ Something finds the party: ${base.title}.`, data: { encounter: base.id } });
+    this.startRandom(enc, "wandering");
+    this.run.usedRandom = this.run.usedRandom.filter((x) => x !== enc.id);
+    return enc.title;
   }
 
   // ─── random encounters and probes ──────────────────────────────────────────
@@ -1141,6 +1277,13 @@ export class Game {
       item = { id: spec.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name: spec.name, description: spec.description ?? "", value: spec.value ?? 10, idealFor: spec.idealFor };
     }
     item = structuredClone(item);
+    if (/torch/i.test(item.name)) {
+      const n = Math.max(1, Number((spec.name ?? spec.item ?? "").match(/\d+/)?.[0] ?? 1));
+      this.run.light.torches += n;
+      this.emit("light", { line: `🔥 The party gains ${n} torch${n === 1 ? "" : "es"} (${this.run.light.torches} in the pack).`, data: { ...this.run.light } });
+      this.persist();
+      return "Torches added to the party's pack.";
+    }
     if (/healing potion/i.test(item.name)) {
       const who = spec.to ? this.char(spec.to) : null;
       if (who) { who.inventory.push("healing potion"); this.emit("loot_claim", { actor: who.id, line: `🧪 ${who.name} gets a healing potion.`, data: { item: "healing-potion", value: 10 } }); return "Given."; }
@@ -1241,6 +1384,10 @@ export class Game {
 
   private hurtChar(c: Character, dmg: number, crit = false) {
     if (c.dead) return;
+    if (this.isGrim() && (this.hasStatus(c, "Dying") || this.hasStatus(c, "Stable"))) {
+      this.kill(c, "struck down while they lay dying");
+      return;
+    }
     if (this.hasStatus(c, "Dying") || this.hasStatus(c, "Stable")) {
       this.removeStatus(c, "Stable");
       this.addStatus(c, "Dying", "at 0 HP");
@@ -1253,12 +1400,18 @@ export class Game {
     if (c.hp > 0) return;
     const overflow = -c.hp;
     c.hp = 0;
-    if (overflow >= c.maxHp) {
+    // No instant death on grim: with a handful of HP it would skip the countdown, which is where the drama is.
+    if (!this.isGrim() && overflow >= c.maxHp) {
       this.kill(c, `killed outright (${dmg} damage)`);
       return;
     }
     this.addStatus(c, "Dying", "at 0 HP");
     c.deathSaves = { successes: 0, failures: 0 };
+    if (this.isGrim()) {
+      c.dyingRounds = Math.max(1, die(4) + c.stats.con + talentSum(c, "dying"));
+      this.emit("character_down", { actor: c.id, line: `💀 ${c.name} falls! ${c.dyingRounds} round${c.dyingRounds === 1 ? "" : "s"} to live unless someone reaches them (stabilize, a heal, or a potion).`, data: { rounds: c.dyingRounds } });
+      return;
+    }
     this.emit("character_down", { actor: c.id, line: `💀 ${c.name} falls, dying! They need healing, or luck.` });
   }
 
@@ -1266,6 +1419,16 @@ export class Game {
   deathSave(charId: string): string {
     const c = this.char(charId);
     if (!this.hasStatus(c, "Dying")) return `${c.name} isn't dying.`;
+    if (this.isGrim()) {
+      c.dyingRounds = (c.dyingRounds ?? 1) - 1;
+      if (c.dyingRounds <= 0) {
+        this.kill(c, "bled out before anyone reached them");
+        return `${c.name} is gone.`;
+      }
+      const line = `⏳ ${c.name} is bleeding out: ${c.dyingRounds} round${c.dyingRounds === 1 ? "" : "s"} left.`;
+      this.emit("death_save", { actor: c.id, line, data: { rounds: c.dyingRounds } });
+      return line;
+    }
     const n = die(20);
     let line = `🎲 ${c.name} makes a death save: ${n}. `;
     if (n === 20) {
@@ -1338,7 +1501,7 @@ export class Game {
     if (!seed) return null;
     this.run.replacementsUsed++;
     this.pendingJoins = this.pendingJoins.filter((s) => s !== seat);
-    const c = buildCharacter(seed, seat, this.run.seatModels[seat]);
+    const c = buildCharacter(seed, seat, this.run.seatModels[seat], this.isGrim());
     this.chars.set(c.id, c);
     for (const s of c.spells) this.writeSkill(c, s);
     this.emit("character_joins", { actor: c.id, line: `🧭 A newcomer joins the party: ${c.name}, a ${c.race} ${c.klass}.`, data: { seat, id: c.id } });
@@ -1364,6 +1527,7 @@ export class Game {
     c.hp = Math.min(c.maxHp, c.hp + amount);
     for (const s of ["Dying", "Stable"]) this.removeStatus(c, s);
     c.deathSaves = { successes: 0, failures: 0 };
+    c.dyingRounds = undefined;
     if (wasDown && this.combat && !this.combat.order.some((o) => o.id === c.id)) {
       this.combat.order.push({ kind: "pc", id: c.id, init: 0 });
     }
@@ -1395,9 +1559,9 @@ export class Game {
     return `${c.name} is Hallucinating. Clear it with set_status when they come back to reality.`;
   }
 
-  grantXp(target: string, amount: number, reason: string) {
+  grantXp(target: string, amount: number, reason: string, source: "gm" | "kill" = "gm") {
     const list = target === "party" ? this.players() : [this.char(target)];
-    amount = Math.max(0, Math.min(amount, 300));
+    amount = Math.max(0, Math.min(amount, this.isGrim() && source === "gm" ? 20 : 300));
     for (const c of list) {
       if (c.dead) continue;
       c.xp += amount;
@@ -1408,6 +1572,7 @@ export class Game {
   }
 
   private levelUp(c: Character) {
+    if (this.isGrim()) return this.levelUpGrim(c);
     c.level++;
     const gain = 4 + Math.max(0, c.stats.con) + 1;
     c.maxHp += gain;
@@ -1416,6 +1581,21 @@ export class Game {
     c.slots.current++;
     c.pendingLevelUp = true;
     this.emit("level_up", { actor: c.id, line: `🆙 LEVEL UP! ${c.name} reaches level ${c.level}. +${gain} max HP, +1 spell slot, and they may write one new spell.` });
+  }
+
+  /** grim levels are rare and felt: roll your hit die for HP, and roll a talent. */
+  private levelUpGrim(c: Character) {
+    c.level++;
+    const gain = Math.max(1, die(c.hitDie ?? 6) + c.stats.con);
+    c.maxHp += gain;
+    c.hp += gain;
+    const caster = ["int", "wis", "cha"].includes(c.castingStat);
+    if (caster) { c.slots.max++; c.slots.current++; }
+    const t = TALENTS[die(TALENTS.length) - 1];
+    const what = t.apply(c, this);
+    c.pendingLevelUp = true;
+    this.emit("level_up", { actor: c.id, line: `🆙 LEVEL UP! ${c.name} reaches level ${c.level}: +${gain} max HP${caster ? ", +1 spell slot" : ""}, and a new spell to write.` });
+    this.emit("talent", { actor: c.id, line: `✴️ ${c.name} gains a talent: ${t.name} (${what}).`, data: { talent: t.name, effect: what } });
   }
 
   reviewSpell(charId: string, verdict: "approve" | "nerf" | "deny", ruling: string, revisedMd?: string) {
@@ -1626,7 +1806,8 @@ export class Game {
       });
       this.monsters = this.monsters.filter((x) => x.id !== m.id);
       this.leaveCombat(m.id);
-      this.grantXp("party", m.xp, `defeating ${m.name}`);
+      // grim: a rat is worth 1, so a level is an occasion.
+      this.grantXp("party", this.isGrim() ? Math.max(1, Math.round(m.xp * 0.2)) : m.xp, `defeating ${m.name}`, "kill");
     }
   }
 
@@ -1642,7 +1823,10 @@ export class Game {
       `Spells:\n${c.spells.map((s) => `  - ${s.name} [${s.effect}${s.dice ? ` ${s.dice}` : ""}${s.status ? ` → ${s.status}` : ""}, target ${s.target}, cost ${s.slotCost}]: ${s.description}`).join("\n")}`,
       `Items: ${(c.items ?? []).map((i) => `${i.name}${i.cursed && i.identified ? ` (really a ${i.cursed.trueName}!)` : ""}: ${i.description}`).join(" | ") || "none"}`,
       `Inventory: ${c.inventory.join(", ") || "nothing"}`,
-      `Statuses: ${c.statuses.map((s) => `${s.name} (${s.note})`).join(", ") || "none"}${this.hasStatus(c, "Dying") ? `  Death saves: ${c.deathSaves.successes} ✓ / ${c.deathSaves.failures} ✗` : ""}`,
+      `Statuses: ${c.statuses.map((s) => `${s.name} (${s.note})`).join(", ") || "none"}${this.hasStatus(c, "Dying") ? (this.isGrim() ? `  Rounds to live: ${c.dyingRounds}` : `  Death saves: ${c.deathSaves.successes} ✓ / ${c.deathSaves.failures} ✗`) : ""}`,
+      c.talents?.length ? `Talents: ${c.talents.map((t) => t.name).join(", ")}` : "",
+      c.lostSpells?.length ? `Spells lost until you rest: ${c.lostSpells.join(", ")}` : "",
+      this.isGrim() && this.location().dark ? `Light: ${this.run.light.turns} turns left on the torch, ${this.run.light.torches} more in the pack.` : "",
       c.secretGoal ? `Your secret goal (only you and the GM know): ${c.secretGoal}` : "",
       c.role === "player" && this.bondSummary(c.id) ? `How you feel about the party (private): ${this.bondSummary(c.id)}` : "",
       c.pendingLevelUp ? "LEVEL UP PENDING: write a new spell and submit it with propose_spell." : "",

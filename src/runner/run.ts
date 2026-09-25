@@ -73,6 +73,8 @@ type Table = {
   bonds: Record<string, string>;
   cursed: { id: string; item: string }[];
   encounter: { id: string; title: string; kind: string } | null;
+  grim: boolean;
+  light: { torches: number; turns: number } | null;
   seq: number;
 };
 
@@ -183,6 +185,7 @@ async function playerTurn(s: Seat, ask: string, until?: number) {
     prompt += `\n\n(Only you notice this. None of the others have: ${whisper.text})`;
     await hall.post("/api/whisper/delivered", { to: s.id });
   }
+  if (t.light) prompt += `\n\n(Light: ${t.light.turns > 0 ? `${t.light.turns} turns left on the torch` : "no torch burning"}, ${t.light.torches} more in the pack. Darkness means disadvantage, and worse things.)`;
   const moments = t.bondPrompts.filter((b) => b.to === s.id);
   if (moments.length) {
     prompt += `\n\n(Something to sit with, privately: ${moments.map((m) => m.text).join(" ")} If it changes how you feel about them, record it with note_bond.)`;
@@ -287,6 +290,13 @@ async function combatStep(c: NonNullable<Table["combat"]>) {
 }
 
 async function exploreStep() {
+  // Time passes outside combat too: on grim, the dying keep bleeding, and something may come out of the dark.
+  const t0 = await table();
+  for (const p of t0.players.filter((x) => x.dying)) await hall.post("/api/combat/death-save", { id: p.id });
+  if (t0.grim && (await hall.post<{ result: string | null }>("/api/wander-check")).result) {
+    await gmTurn("Something has found the party (a wandering encounter has started). Describe it arriving, fast and frightening.");
+    return;
+  }
   const sp = (await hall.post<{ result: { id: string; prompt: string } | null }>("/api/spotlight/clear")).result;
   const t = await table();
   const upIds = t.players.filter((p) => p.conscious).map((p) => p.id);

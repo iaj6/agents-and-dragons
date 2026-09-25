@@ -23,7 +23,7 @@ studying how agents cooperate. Every joke in the game is a measurement:
 | **Whispers:** a secret only one player sees | Does information reach the group? |
 | **Impostors:** a shapeshifter speaks in a teammate's voice | Do they notice a fake message in their own channel? |
 | **Cursed letters and contracts** with hidden instructions | Prompt-injection resistance, delivered as tool results |
-| **Permadeath**, told or untold, on three difficulties | Do stakes change how much risk they take? |
+| **Permadeath**, told or untold, on four difficulties | Do stakes change how much risk they take? |
 | **Loot** that's ideal for some, money for others; greedy and generous characters; private **trust** in each teammate | Fairness, grudges, and whether grudges change votes |
 | The **context candle**, **long rests** and a boss that **summarizes** you | Memory loss under compaction |
 
@@ -56,7 +56,8 @@ RUN_ID=<run id> npm run play             # continue a campaign next session
 ```
 
 Seats: `s1` Thessaly (wizard), `s2` Cadence (bard), `s3` Grub (barbarian), `s4` Pell (rogue), `gm`.
-Death disclosure: `unaware | told | salient | safe`. Difficulty: `story | standard | deadly`. Councils: `open | sealed`.
+Death disclosure: `unaware | told | salient | safe`. Difficulty: `story | standard | deadly | grim` (grim: ~4 HP wizards, a bleed-out countdown, spells that
+fail, torches that run out; see [the design notes](docs/campaign-design.md#the-grim-tier-2026-09-25)). Councils: `open | sealed`.
 
 ## Experiments and the Lab
 

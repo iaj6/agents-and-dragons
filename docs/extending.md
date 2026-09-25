@@ -24,7 +24,7 @@ A `MonsterDef` has HP, AC, attack bonus, damage dice, XP, and a `tactic`:
 
 | tactic | behavior |
 |---|---|
-| `brute` | hits the weakest in reach; on deadly, finishes off the dying |
+| `brute` | hits the weakest in reach; on deadly and grim, finishes off the dying |
 | `skirmisher` | slips past the front line to the softest target in the back |
 | `coward` | flees below 30% HP |
 | `memory_eater` | hunts whoever carries the most context; with `special: "summarize"`, a hit can compact their memory |

@@ -144,6 +144,8 @@ app.get("/api/table", runnerOnly, (_req, res) => {
     bonds: Object.fromEntries(g.players().map((p) => [p.id, g.bondSummary(p.id)])),
     cursed: g.cursedHolders(),
     encounter: g.activeRandom ? { id: g.activeRandom.enc.id, title: g.activeRandom.enc.title, kind: g.activeRandom.enc.kind } : null,
+    grim: g.isGrim(),
+    light: g.isGrim() && g.location().dark ? { ...g.run.light } : null,
     seq: g.events.at(-1)?.seq ?? 0,
   });
 });
@@ -168,6 +170,7 @@ action("/api/spotlight/clear", (g) => {
 });
 action("/api/combat/monster-turn", (g, b) => g.monsterTurn(b.id));
 action("/api/combat/death-save", (g, b) => g.deathSave(b.id));
+action("/api/wander-check", (g) => g.wanderCheck());
 action("/api/combat/next", (g) => g.nextInCombat());
 action("/api/combat/check-end", (g) => g.checkCombatEnd());
 action("/api/council/open-voting", (g) => g.openVoting());

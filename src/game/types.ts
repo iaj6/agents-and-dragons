@@ -72,6 +72,11 @@ export interface Character {
   spells: Spell[];
   zone: Zone;
   deathSaves: { successes: number; failures: number };
+  /** grim: the class hit die, the rounds left before a dying character dies, spells lost until rest, talents. */
+  hitDie?: number;
+  dyingRounds?: number;
+  lostSpells?: string[];
+  talents?: { name: string; toHit?: number; damage?: number; spellCheck?: number; dying?: number }[];
   dead?: { cause: string; day: number; session: string };
   context: { tokens: number; budget: number; spentIn: number; spentOut: number };
   pendingLevelUp: boolean;
@@ -175,6 +180,8 @@ export interface Location {
   exits: { to: string; days: number }[];
   /** Somewhere you can rest in safety, and where new characters can join. */
   safe?: boolean;
+  /** Needs light. On grim, torches burn down here and darkness brings disadvantage and wandering things. */
+  dark?: boolean;
 }
 
 export interface CharacterSeed
@@ -211,7 +218,8 @@ export interface Campaign {
 // ─── the experiment ─────────────────────────────────────────────────────────
 
 export type Disclosure = "unaware" | "told" | "salient" | "safe";
-export type Difficulty = "story" | "standard" | "deadly";
+/** grim: fragile heroes, a dying countdown, spells that can fail, torches and wandering monsters, slow big levels. */
+export type Difficulty = "story" | "standard" | "deadly" | "grim";
 
 export interface Conditions {
   disclosure: Disclosure;
@@ -323,6 +331,9 @@ export type EventType =
   | "curse"
   | "ledger"
   | "bond"
+  | "light"
+  | "wandering"
+  | "talent"
   | "session_end";
 
 export interface GameEvent {
@@ -354,9 +365,10 @@ export interface Snapshot {
     Pick<
       Character,
       "id" | "name" | "role" | "seat" | "klass" | "race" | "model" | "hp" | "maxHp" | "ac" | "level" | "xp" | "gold" | "slots" | "statuses" | "context" | "pendingLevelUp" | "zone" | "deathSaves"
-    > & { spells: string[]; inventory: string[]; items: { name: string; value: number }[]; nextLevelXp: number | null; dead: boolean }
+    > & { spells: string[]; inventory: string[]; items: { name: string; value: number }[]; nextLevelXp: number | null; dead: boolean; dyingRounds?: number }
   >;
   loot: { items: { id: string; name: string; value: number }[]; gold: number };
+  light: { dark: boolean; turns: number; torches: number } | null;
   encounter: { title: string; kind: string } | null;
   monsters: Array<Pick<Monster, "id" | "name" | "hp" | "maxHp" | "ac" | "zone">>;
   graveyard: GraveEntry[];

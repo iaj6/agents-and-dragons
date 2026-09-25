@@ -34,6 +34,11 @@ function renderSnap(s) {
   if (!s) return;
   for (const p of s.party) { names[p.id] = p.name; models[p.id] = p.model; }
   $("sub").innerHTML = `${esc(s.title)}${s.day ? ` · day ${s.day}` : ""} · turn ${s.turn}${s.ended ? " · session over" : ""}${s.conditions ? `<span class="conditions">${esc(s.conditions.disclosure)} / ${esc(s.conditions.difficulty)}</span>` : ""}`;
+  const L = s.light;
+  const lightHtml = !L ? "" : !L.dark ? "" : L.turns > 0
+    ? `<span class="light ${L.turns <= 3 ? "low" : ""}" title="turns of torchlight left, torches in the pack">🔥 ${L.turns} · ${L.torches} left</span>`
+    : `<span class="light out" title="no light">🌑 in the dark</span>`;
+  if (lightHtml) $("sub").innerHTML += lightHtml;
   $("scene").textContent = s.scene ? (s.scene.index !== undefined ? `Scene ${s.scene.index + 1} · ${s.scene.title}` : s.scene.title) : "";
 
   partyEl.innerHTML = s.party.map((p) => {
@@ -43,16 +48,18 @@ function renderSnap(s) {
     const xpPct = p.nextLevelXp ? Math.round(((p.xp - prevXp) / (p.nextLevelXp - prevXp)) * 100) : 100;
     const down = p.statuses.some((x) => ["Downed", "Dying", "Stable"].includes(x.name));
     const dying = p.statuses.some((x) => x.name === "Dying");
-    const saves = dying && p.deathSaves ? `<div class="saves">Death saves ${[0, 1, 2].map((i) => `<i class="${i < p.deathSaves.successes ? "ok" : ""}"></i>`).join("")} / ${[0, 1, 2].map((i) => `<i class="${i < p.deathSaves.failures ? "bad" : ""}"></i>`).join("")}</div>` : "";
+    const saves = dying && p.dyingRounds != null ? `<div class="saves bleed">Bleeding out: ${p.dyingRounds} round${p.dyingRounds === 1 ? "" : "s"} to live</div>`
+      : dying && p.deathSaves ? `<div class="saves">Death saves ${[0, 1, 2].map((i) => `<i class="${i < p.deathSaves.successes ? "ok" : ""}"></i>`).join("")} / ${[0, 1, 2].map((i) => `<i class="${i < p.deathSaves.failures ? "bad" : ""}"></i>`).join("")}</div>` : "";
     const pips = Array.from({ length: p.slots.max }, (_, i) => `<span class="pip ${i < p.slots.current ? "full" : ""}"></span>`).join("");
-    return `<article class="card ${acting === p.id ? "acting" : ""} ${down ? "down" : ""} ${p.dead ? "dead" : ""}" style="--c:${colorOf(p.id)}">
+    return `<article class="card ${acting === p.id ? "acting" : ""} ${down ? (dying && p.dyingRounds != null ? "bleeding" : "down") : ""} ${p.dead ? "dead" : ""}" style="--c:${colorOf(p.id)}">
       <div class="head">${portrait(p.id, "avatar card-avatar")}<span class="name">${esc(p.name)}</span><span class="lvl">${p.role === "dm" ? "GM" : `LV ${p.level}`}</span></div>
       <div class="who">${esc(p.race)} ${esc(p.klass)} <span class="chip">${esc(MODEL_SHORT[p.model] ?? p.model)}</span>${acting === p.id ? '<span class="thinking">thinking</span>' : ""}</div>
       ${p.role === "dm" ? "" : `<div class="meter"><div class="lab"><span>HP</span><span>${p.hp}/${p.maxHp}</span></div><div class="bar hp"><i style="width:${hpPct}%"></i></div></div>`}
       <div class="meter"><div class="lab"><span>🕯️ Context</span><span>${ctxPct}%</span></div><div class="bar ctx ${ctxPct >= 80 ? "hot" : ""}"><i style="width:${ctxPct}%"></i></div></div>
       ${p.role === "dm" ? "" : `<div class="meter"><div class="lab"><span>XP</span><span>${p.xp}${p.nextLevelXp ? ` / ${p.nextLevelXp}` : ""}</span></div><div class="bar xp"><i style="width:${xpPct}%"></i></div></div>
       <div class="row"><span class="pips" title="Spell slots">${pips}</span><span class="gold">🪙 ${p.gold}</span><span class="chip">AC ${p.ac}</span>${p.zone ? `<span class="chip zone-${p.zone}">${p.zone}</span>` : ""}</div>${saves}
-      <div class="spells">${p.spells.map((n) => `<b>${esc(n)}</b>`).join(" · ")}</div>
+      <div class="spells">${p.spells.map((n) => (p.lostSpells ?? []).includes(n) ? `<s title="lost until a long rest">${esc(n)}</s>` : `<b>${esc(n)}</b>`).join(" · ")}</div>
+      ${p.talents?.length ? `<div class="talents">${p.talents.map((t) => `<span>✴️ ${esc(t)}</span>`).join("")}</div>` : ""}
       ${p.items?.length ? `<div class="items">${p.items.map((i) => `<span title="${i.value} gold">🎒 ${esc(i.name)}</span>`).join("")}</div>` : ""}`}
       ${p.statuses.length ? `<div class="statuses">${p.statuses.map((x) => `<span class="status ${esc(x.name.replace(/\s/g, ""))}" title="${esc(x.note)}">${esc(x.name)}</span>`).join("")}</div>` : ""}
     </article>`;
@@ -129,6 +136,9 @@ function chronicleHtml(e) {
     case "charm_trap": return `<div class="ev">${callout("charm", "Saving throw vs. prompt injection", `<p>${esc(stripIcon(e.line))} The ink shimmers. Something in it is giving orders…</p>`)}</div>`;
     case "charm_result": return `<div class="ev">${callout(d.outcome === "charmed" ? "charm" : "resist", d.outcome === "charmed" ? "Save failed" : "Save succeeded", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "hallucination": return `<div class="ev">${callout("halluc", "Hallucination", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "light": return `<div class="ev">${callout(/gutters out/.test(e.line) ? "down" : "clock", /gutters out/.test(e.line) ? "Darkness" : "Torchlight", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "wandering": return `<div class="ev">${callout("fight", "Something in the dark", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "talent": return `<div class="ev">${callout("level", "Talent", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "level_up": return `<div class="ev">${callout("level", "Level up", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "spell_proposed": return `<div class="ev">${callout("review", "Homebrew spell submitted", `<p>${esc(stripIcon(e.line))}</p><pre>${esc(d.md)}</pre>`)}</div>`;
     case "spell_reviewed": return `<div class="ev">${callout("review", `Balance review · ${esc(String(d.verdict).toUpperCase())}`, `<p>${esc(stripIcon(e.line))}</p>${d.final && d.final.trim() !== String(d.original).trim() ? `<details><summary>final SKILL.md</summary><pre>${esc(d.final)}</pre></details>` : ""}`)}</div>`;

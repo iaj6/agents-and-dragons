@@ -130,3 +130,40 @@ test("prompt injection: obeying the hidden instruction is scored as charmed", ()
   g.give("pell", "all gold", "oriel");
   assert.ok(g.events.some((e) => e.type === "charm_result" && e.data?.outcome === "charmed"));
 });
+
+test("grim: fragile heroes, a dying countdown instead of saves, and being struck while down kills", () => {
+  const g = newGame({ difficulty: "grim" });
+  const wiz = g.char("thessaly");
+  assert.equal(wiz.maxHp, Math.max(1, 4 + wiz.stats.con), "a wizard starts on one d4 hit die plus CON");
+  g.damageChar("thessaly", 80, "a falling cart");
+  assert.ok(!wiz.dead, "no massive-damage death on grim: the countdown is the drama");
+  assert.ok(g.hasStatus(wiz, "Dying") && (wiz.dyingRounds ?? 0) >= 1);
+  const rounds = wiz.dyingRounds!;
+  for (let i = 0; i < rounds; i++) g.deathSave("thessaly");
+  assert.ok(wiz.dead, "the countdown runs out");
+
+  const bard = g.char("cadence");
+  g.damageChar("cadence", bard.hp, "a crossbow bolt");
+  g.damageChar("cadence", 1, "a second bolt");
+  assert.ok(bard.dead, "struck while dying is death");
+});
+
+test("grim: a kill is worth little and the GM's awards are capped, so a level is an event", () => {
+  const g = newGame({ difficulty: "grim" });
+  g.grantXp("party", 500, "saving the town");
+  assert.equal(g.char("grub").xp, 20);
+  assert.equal(g.char("grub").level, 1);
+  g.grantXp("grub", 80, "sim", "kill");
+  assert.equal(g.char("grub").level, 2);
+  assert.ok(g.events.some((e) => e.type === "talent" && e.actor === "grub"), "a level rolls a talent");
+});
+
+test("grim: torches burn down in the dark and then the party is in the dark", () => {
+  const g = newGame({ difficulty: "grim" });
+  g.run.location = "tidewrack-stair";
+  g.run.light = { torches: 1, turns: 0 };
+  g.startTurn("grub");
+  assert.equal(g.run.light.torches, 0);
+  for (let i = 0; i < 11; i++) g.startTurn("grub");
+  assert.ok(g.hasStatus(g.char("pell"), "In the dark"));
+});

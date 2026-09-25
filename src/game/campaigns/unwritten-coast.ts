@@ -258,6 +258,7 @@ At the bottom, a clause in a different, smaller hand:
     "tidewrack-stair": {
       id: "tidewrack-stair",
       title: "The Tidewrack Stair",
+      dark: true,
       gmNotes: `A stair cut into the sea cliff, descending into a cave where the tide goes out and never quite comes back. \
 Every step down, the party hears their own names spoken slightly wrong. At the bottom, the Censor keeps a ledger: every memory \
 erased on this coast, struck through in black ink. Start the "the-censor" encounter (if Oriel showed them the hidden way, say so \

@@ -60,6 +60,10 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
       zone: z.enum(["front", "back"]),
     }, ({ zone }) => game.move(me, zone));
 
+    reg("stabilize", "Reach a dying ally and stop the bleeding (a Medicine check). Uses your action in a fight.", {
+      target: z.string().describe("The dying character's id"),
+    }, ({ target }) => game.stabilize(me, target));
+
     reg("use_potion", "Drink a healing potion from your pack, or give one to an ally (it can bring a dying ally back up).", {
       target: z.string().optional().describe("Character id; omit to drink it yourself"),
     }, ({ target }) => game.usePotion(me, target));

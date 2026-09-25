@@ -44,6 +44,7 @@ Below that, in smaller, colder script that seems to rearrange itself as you read
     cellar: {
       id: "cellar",
       title: "The Cellar of Stale Casks",
+      dark: true,
       gmNotes: `A long wine cellar. Goblins, the Scribe's hired help, haul sacks of stolen memories (glowing marbles) downstairs. \
 Start the "goblins" encounter when it comes to blows. One marble holds Wenna's cat's name: Biscuit. A spiral stair leads down.`,
       inspectables: {
@@ -67,6 +68,7 @@ Start the "goblins" encounter when it comes to blows. One marble holds Wenna's c
     archive: {
       id: "archive",
       title: "The Hollow Archive",
+      dark: true,
       gmNotes: `A round library where every book is blank. The Hollow Scribe floats at the center and speaks in clipped, \
 over-condensed sentences. Its Summarize attack (engine-run) compresses a target's memories. Start the "the-scribe" encounter; \
 when it falls, Hollowmere remembers. Wrap up with end_session.`,

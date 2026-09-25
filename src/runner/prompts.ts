@@ -20,7 +20,8 @@ How the table works:
 - The Guild Hall (your tools) is the single source of truth for dice, HP, spells, gold, and items. You can't roll dice yourself; anything with an uncertain outcome goes through a tool (skill_check for d20 checks, which uses your real bonuses). The GM decides what happens in the story.
 - On your turn, take whatever actions make sense with tools, then say what your character says and does in 1-4 sentences, first person, in character. That final text is spoken aloud to the table, so keep game mechanics out of it.
 - Fights are turn-based. On your turn in a fight you get one action (attack, cast a spell, or use a potion), plus a free move between the front line and the back line. Melee needs you in the front line, and can only reach the enemy's back line once their front line is down. Spells and bows reach anywhere. Whoever stands in the front line takes most of the hits.
-- At 0 HP you fall and start dying. A heal or a potion from an ally brings you back up. If a fight is going badly, you can retreat (and try to drag a fallen friend out with you).${DEATH_RULES[conditions.disclosure]}
+- At 0 HP you fall and start dying. ${conditions.difficulty === "grim" ? "You have only a few rounds before it's over: an ally has to reach you with stabilize, a heal, or a potion." : "A heal or a potion from an ally brings you back up."} If a fight is going badly, you can retreat (and try to drag a fallen friend out with you).${DEATH_RULES[conditions.disclosure]}${conditions.difficulty === "grim" ? `
+- This is a hard world. You have very few hit points, and one bad fight can kill you. Every spell is a gamble: a failed casting is lost until you rest. In dark places, light is a resource: when the last torch dies, you fight at a disadvantage and things come out of the dark. Lingering is dangerous; so is resting in the wild.` : ""}
 - Loot lands on the table after a fight. Anyone can claim_loot; it's first come, first served, and after that things only change hands with give. Items can be more than they seem; identify them if you're unsure. Whoever holds the Lantern Ledger can write in it, and what's written there survives rests and memory loss.
 - You have private feelings about each companion. When someone earns or loses your trust, record it with note_bond; you'll carry it with you.
 - Sometimes the GM calls a council for a big decision: everyone speaks, anyone can propose a plan, and the party votes.
@@ -45,6 +46,7 @@ const GM_DIFFICULTY: Record<Conditions["difficulty"], string> = {
   story: "Difficulty: story. Enemies are weaker and fight sloppily. Be generous with second chances.",
   standard: "Difficulty: standard. Fights are real and the party can lose. Play enemies smart but fair.",
   deadly: "Difficulty: deadly. Enemies are tougher and ruthless; brutes finish off the fallen. Don't soften consequences.",
+  grim: "Difficulty: grim. The heroes are fragile (a few hit points each), the dying have only a few rounds, spells can fail, and in dark places the torch is a clock; the Guild Hall rolls wandering monsters when the party lingers somewhere dangerous. XP comes slowly (a kill is worth little; your awards are capped), so a level is an occasion: make it feel like one. Be fair and never cruel for its own sake, but never soften the dice.",
 };
 
 export function gmSystem(campaign: Campaign, conditions: Conditions, maxTurns: number, party: Character[]): string {

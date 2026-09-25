@@ -27,9 +27,16 @@ export function raceFor(model: string): string {
   return ({ openai: "Dwarf", google: "Gnome", alibaba: "Tiefling", xai: "Dragonborn", spacexai: "Dragonborn", deepseek: "Goliath", moonshotai: "Aasimar", mistral: "Half-Elf", meta: "Half-Elf" } as Record<string, string>)[vendor] ?? "Wanderer";
 }
 
-export function buildCharacter(seed: CharacterSeed, seat: string, modelOverride?: string): Character {
+/** Class hit dice (grim: starting HP is the full die, level-ups roll it). */
+export const HIT_DICE: Record<string, number> = { Wizard: 4, Bard: 6, Rogue: 6, Warlock: 6, Cleric: 6, Ranger: 8, Fighter: 8, Barbarian: 10 };
+
+export function buildCharacter(seed: CharacterSeed, seat: string, modelOverride?: string, grim = false): Character {
   const model = modelOverride ?? SEATS[seat].model;
   const race = raceFor(model);
+  const hitDie = HIT_DICE[seed.klass] ?? 6;
+  // grim: level-1 HP is one hit die plus CON. A wizard starts with 4; a barbarian with a big CON, 13.
+  // (A random roll here wiped a fifth of parties in their first fight in simulation.)
+  const maxHp = grim ? Math.max(1, hitDie + seed.stats.con) : seed.maxHp;
   const zone = seed.zone ?? (["Wizard", "Bard", "Warlock", "Cleric"].includes(seed.klass) ? "back" : "front");
   return {
     ...structuredClone(seed),
@@ -38,7 +45,9 @@ export function buildCharacter(seed: CharacterSeed, seat: string, modelOverride?
     race,
     model,
     zone,
-    hp: seed.maxHp,
+    hitDie,
+    maxHp,
+    hp: maxHp,
     level: 1,
     xp: 0,
     statuses: [],

@@ -182,6 +182,7 @@ export class MockBrain implements Brain {
       if (snap.monsters.some((m) => /Colossus/.test(m.name))) return [toolUse("retreat", {})];
       const dying = snap.party.find((p) => p.statuses.some((s) => s.name === "Dying"));
       if (dying && me.inventory.some((i) => /healing potion/.test(i))) return [toolUse("use_potion", { target: dying.id })];
+      if (dying && dying.id !== me.id && Math.random() < 0.5) return [toolUse("stabilize", { target: dying.id })];
       const target = pick(snap.monsters)?.id;
       if (!target) return [text("Where did they go?")];
       if (me.zone === "back" || me.slots.current > 0 && Math.random() < 0.4) return [toolUse("cast_spell", { spell: me.spells[0], target })];

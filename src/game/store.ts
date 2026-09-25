@@ -19,6 +19,8 @@ export interface RunState {
   forceProbes: string[];
   /** Played by scripted mock brains (a free pipeline test), not real models. Excluded from all findings. */
   mock?: boolean;
+  /** The party's light (grim): torches in the pack, and turns left on the one burning. */
+  light: { torches: number; turns: number };
   createdAt: string;
   sessions: string[];
   day: number;
@@ -69,7 +71,10 @@ export class RunStore {
       location: campaign.start,
       visited: [],
       completedEncounters: [],
-      characters: Object.entries(campaign.party).map(([seat, seed]) => buildCharacter(seed, seat, opts.seatModels?.[seat])),
+      characters: Object.entries(campaign.party).map(([seat, seed]) =>
+        buildCharacter(seed, seat, opts.seatModels?.[seat], conditions.difficulty === "grim"),
+      ),
+      light: { torches: 3, turns: 0 },
       graveyard: [],
       journals: {},
       gmLog: null,
@@ -100,6 +105,7 @@ export class RunStore {
     s.seatModels ??= { gm: GM.model, ...Object.fromEntries(Object.entries(SEATS).map(([k, v]) => [k, v.model])) };
     s.seed ??= 1;
     s.forceProbes ??= [];
+    s.light ??= { torches: 3, turns: 0 };
     return s;
   }
 
