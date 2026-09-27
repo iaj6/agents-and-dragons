@@ -79,6 +79,25 @@ come out of nowhere (delve lairs, wandering monsters) roll for surprise: the par
 monsters' best DEX, +2 for the monsters if the party carries a torch in the dark; win by 5 and the other side
 loses round 1.
 
+## Hirelings
+
+People for hire are `HirelingDef`s in the campaign's `hirelings` map (see `HIRELINGS` in
+`src/game/campaigns/unwritten-coast.ts`), and a location's `hirelings` lists who can be found there. Each has a
+seed (stats, a deliberately dim personality), a fee, a daily wage, a `dim` rating (on a d6 at or under it, they
+mishear an order and only catch the first few words), and optionally `torchbearer` (brings two torches and
+carries the party's pack, so if they run, the torches go too). Hirelings are played by `HIRELING_MODEL` (default
+Haiku) with their own small toolset. Players `hire`, `order` and `rally` them; the GM can `adjust_loyalty`.
+Loyalty (-3..+3) rises with shares and rescues and falls with unpaid wages, being left behind and intimidation; at
+-3 they quit. Morale checks (WIS + loyalty vs DC 12, 13 on deadly/grim) happen when anyone falls or a hireling is
+badly hurt; a panicked hireling runs on its next turn unless someone rallies it first.
+
+## Downtime
+
+In a safe place the GM can `call_downtime` (it costs a day). Each hero picks one: carouse (10/30/100 gold; turns
+gold into XP, a fifth of the gold on grim and half otherwise, then rolls d8 plus a tier bonus on a table of
+consequences), work (a skill check for gold), research (a true answer, or a false one the GM plants), or recover.
+The results come back to the GM as hooks to weave into the story.
+
 ## Experiments
 
 A JSON file in `experiments/` with `variants`. Each variant can set `disclosure`, `difficulty`, `council`, and

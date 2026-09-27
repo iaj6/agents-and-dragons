@@ -20,7 +20,7 @@ export interface RunState {
   /** Played by scripted mock brains (a free pipeline test), not real models. Excluded from all findings. */
   mock?: boolean;
   /** The party's light (grim): torches in the pack, and turns left on the one burning. */
-  light: { torches: number; turns: number };
+  light: { torches: number; turns: number; bearer?: string };
   /** Rooms explored so far, per location (delving). */
   delves?: Record<string, number>;
   createdAt: string;

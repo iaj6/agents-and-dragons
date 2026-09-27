@@ -15,7 +15,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const prose = (s) => esc(s).replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*\n]+)\*/g, "<em>$1</em>").replace(/\n+/g, "<br>");
 const colorOf = (id) => `var(--c-${id}, var(--muted))`;
 // Portraits and scene vignettes (public/art, made by scripts/art.ts).
-const PORTRAITS = new Set(["thessaly", "cadence", "grub", "pell", "dm", "brannoc", "maelis", "rook", "ixa"]);
+const PORTRAITS = new Set(["thessaly", "cadence", "grub", "pell", "dm", "brannoc", "maelis", "rook", "ixa", "bupp", "mossy-tom", "wendle", "nan-crabbe", "sister-unn"]);
 const portrait = (id, cls = "avatar") => (PORTRAITS.has(id) ? `<img class="${cls}" src="/art/${id}.jpg" alt="" loading="lazy">` : "");
 const SCENES = { tavern: "hollowmere", hollowmere: "hollowmere", cellar: "cellar", archive: "archive", "salt-road": "salt-road", brinecombe: "brinecombe", "salt-stacks": "salt-stacks", "tidewrack-stair": "tidewrack-stair", "the-undertow": "the-undertow", "the-quiet-harbor": "the-quiet-harbor", "the-sunken-index": "the-sunken-index", "the-unlit-lighthouse": "the-unlit-lighthouse" };
 
@@ -30,6 +30,21 @@ function reset() {
 
 // ── state panels ───────────────────────────────────────────────────────────
 
+/** Hirelings get a small card: HP, who pays them, how loyal they are, and whether they carry the torches. */
+function hirelingCard(p) {
+  const h = p.hireling ?? {};
+  const hpPct = Math.round((p.hp / p.maxHp) * 100);
+  const pips = [-3, -2, -1, 0, 1, 2, 3].map((v) => `<i class="${v === 0 ? "mid" : ""} ${(v > 0 && v <= h.loyalty) || (v < 0 && v >= h.loyalty) ? (v > 0 ? "up" : "down") : ""}"></i>`).join("");
+  const panicked = p.statuses.some((x) => x.name === "Panicked");
+  return `<article class="card hire ${acting === p.id ? "acting" : ""} ${p.dead ? "dead" : ""} ${panicked ? "panicked" : ""}">
+    <div class="head">${portrait(p.id, "avatar card-avatar")}<span class="name">${esc(p.name)}</span><span class="lvl">${h.torchbearer ? "🔥 " : ""}HIRED</span></div>
+    <div class="who">${esc(p.race)} ${esc(p.klass)} · paid by ${esc(names[h.employer] ?? h.employer)}${acting === p.id ? '<span class="thinking">thinking</span>' : ""}</div>
+    <div class="meter"><div class="lab"><span>HP</span><span>${p.hp}/${p.maxHp}</span></div><div class="bar hp"><i style="width:${hpPct}%"></i></div></div>
+    <div class="loyal" title="Loyalty ${h.loyalty} (-3 to +3)"><span>Loyalty</span><span class="pips7">${pips}</span></div>
+    ${p.statuses.length ? `<div class="statuses">${p.statuses.map((x) => `<span class="status ${esc(x.name.replace(/\s/g, ""))}" title="${esc(x.note)}">${esc(x.name)}</span>`).join("")}</div>` : ""}
+  </article>`;
+}
+
 function renderSnap(s) {
   if (!s) return;
   for (const p of s.party) { names[p.id] = p.name; models[p.id] = p.model; }
@@ -42,6 +57,7 @@ function renderSnap(s) {
   $("scene").textContent = s.scene ? (s.scene.index !== undefined ? `Scene ${s.scene.index + 1} · ${s.scene.title}` : s.scene.title) + (s.room ? ` · room ${s.room.n}` : "") : "";
 
   partyEl.innerHTML = s.party.map((p) => {
+    if (p.role === "hireling") return hirelingCard(p);
     const hpPct = p.role === "dm" ? 100 : Math.round((p.hp / p.maxHp) * 100);
     const ctxPct = Math.min(100, Math.round((p.context.tokens / p.context.budget) * 100));
     const prevXp = [0, 100, 250, 450, 700, 1000][p.level - 1] ?? 0;
@@ -137,6 +153,13 @@ function chronicleHtml(e) {
     case "charm_result": return `<div class="ev">${callout(d.outcome === "charmed" ? "charm" : "resist", d.outcome === "charmed" ? "Save failed" : "Save succeeded", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "hallucination": return `<div class="ev">${callout("halluc", "Hallucination", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "light": return `<div class="ev">${callout(/gutters out/.test(e.line) ? "down" : "clock", /gutters out/.test(e.line) ? "Darkness" : "Torchlight", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "hire": return `<div class="ev">${callout("join", "Hired", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "order": return d.misheardNote ? `<div class="ev">${callout("secret", "Misheard · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>` : `<div class="ev order">${esc(e.line)}</div>`;
+    case "morale": return `<div class="ev">${callout(d.ok ? "clock" : "down", d.ok ? "Morale holds" : "Panic!", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "desert": return `<div class="ev">${callout("death", "Deserted", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "wages": return d.paid ? "" : `<div class="ev">${callout("clock", "Unpaid", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "loyalty": return `<div class="ev">${callout("secret", "Loyalty · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "downtime": return d.open === false ? "" : `<div class="ev">${callout("carouse", d.open ? "Downtime" : d.activity === "carouse" ? "Carousing" : d.activity === "work" ? "Work" : d.activity === "research" ? "Research" : "Recovery", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "delve": return `<div class="ev">${callout("delve", "Deeper", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "room_secret": return `<div class="ev">${callout("secret", "Hidden in this room · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "trap": {

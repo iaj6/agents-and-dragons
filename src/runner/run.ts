@@ -7,7 +7,7 @@ import { Agent } from "./agent.js";
 import { ClaudeBrain, MockBrain, type Brain } from "./brains.js";
 import { CodeSeat } from "./code-seat.js";
 import { Hall } from "./hall.js";
-import { gmSystem, graveyardReminder, playerSystem } from "./prompts.js";
+import { gmSystem, graveyardReminder, hirelingSystem, playerSystem } from "./prompts.js";
 import { GM_LOG_PROMPT, JOURNAL_PROMPT, UsageLimitError, type CompactReason, type Seat } from "./seat.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -76,6 +76,9 @@ type Table = {
   encounter: { id: string; title: string; kind: string } | null;
   grim: boolean;
   light: { torches: number; turns: number } | null;
+  hirelings: { id: string; name: string; employer: string; conscious: boolean; dying: boolean; panicked: boolean; order: { by: string; heard: string } | null }[];
+  pendingHires: string[];
+  downtime: { done: string[]; available: string[] } | null;
   seq: number;
 };
 
@@ -98,7 +101,8 @@ const whisperNoise = () =>
 const table = () => hall.get<Table>("/api/table");
 const character = (id: string) => hall.get<Character & { conscious: boolean; hasPendingSpell: boolean }>(`/api/character?id=${id}`);
 const run0 = await hall.get<RunState>("/api/run");
-const party = await Promise.all(run0.characters.filter((c) => !c.dead).map((c) => character(c.id)));
+const everyone = await Promise.all(run0.characters.filter((c) => !c.dead && !c.hireling?.deserted).map((c) => character(c.id)));
+const party = everyone.filter((c) => c.role === "player");
 
 function makeSeat(c: Character, token: string, system: string): Seat {
   // The run decides who plays which seat (set when the run was created), so continued runs keep their table.
@@ -111,7 +115,11 @@ function makeSeat(c: Character, token: string, system: string): Seat {
 const gm = makeSeat(await character("dm"), session.tokens.dm, gmSystem(campaign, conditions, MAX_TURNS, party));
 const players = new Map<string, Seat>();
 for (const c of party) players.set(c.id, makeSeat(c, session.tokens[c.id], playerSystem(c, campaign, conditions, party)));
-await Promise.all([gm, ...players.values()].map((s) => s.connect(`${BASE}/mcp`)));
+/** Hirelings, played by a cheap model. They act in fights and when someone gives them an order. */
+const hirelings = new Map<string, Seat>();
+const employerName = async (c: Character) => (await character(c.hireling!.employer)).name;
+for (const c of everyone.filter((x) => x.role === "hireling")) hirelings.set(c.id, makeSeat(c, session.tokens[c.id], hirelingSystem(c, campaign, await employerName(c))));
+await Promise.all([gm, ...players.values(), ...hirelings.values()].map((s) => s.connect(`${BASE}/mcp`)));
 
 /** Memory carried in from earlier sessions, prepended to each seat's first prompt. */
 const carryOver = new Map<string, string>();
@@ -206,6 +214,49 @@ async function playerTurn(s: Seat, ask: string, until?: number) {
   await settle();
 }
 
+/** Someone was hired: give them a seat at the table (a cheap model, a dim persona). */
+async function seatHirelings() {
+  const t = await table();
+  for (const id of t.pendingHires) {
+    const joined = (await hall.post<{ result: { id: string; token: string } }>("/api/hireling/seat", { id })).result;
+    const c = await character(joined.id);
+    const s = makeSeat(c, joined.token, hirelingSystem(c, campaign, await employerName(c)));
+    await s.connect(`${BASE}/mcp`);
+    s.lastSeq = (await hall.get<{ lastSeq: number }>("/api/transcript?since=999999999")).lastSeq;
+    hirelings.set(c.id, s);
+  }
+}
+
+/** A hireling's turn: in a fight, or to carry out an order (as they heard it). */
+async function hirelingTurn(s: Seat, inFight: boolean) {
+  const t = await table();
+  const h = t.hirelings.find((x) => x.id === s.id);
+  if (!h) return;
+  if (h.panicked) {
+    await hall.post("/api/hireling/flee", { id: s.id });
+    return;
+  }
+  const order = h.order ? `${(await character(h.order.by)).name} told you: "${h.order.heard}"` : "Nobody has told you what to do.";
+  await playerTurn(s, `${inFight ? "It's your turn in the fight." : "The party is looking at you."} ${order} Do one simple thing, then say one short line.`);
+  if (h.order) await hall.post("/api/hireling/order-done", { id: s.id });
+}
+
+/** Downtime in town: each hero spends the day on one thing, then the GM weaves in what came of it. */
+async function runDowntime() {
+  const t = await table();
+  for (const s of players.values()) {
+    if (t.downtime!.done.includes(s.id)) continue;
+    const me = await character(s.id);
+    if (!me.conscious) continue;
+    await playerTurn(
+      s,
+      `DOWNTIME. You have a day in town (${me.gold} gold on you). Pick ONE with the downtime tool: carouse (spend gold: 10 quiet, 30 a real night, 100 a legend; it turns gold into XP, and things happen), work (earn gold with a skill), research (ask what the town knows about something), or recover (full HP, clear head).${t.downtime!.available.length ? ` You could also hire help (hire): ${t.downtime!.available.join("; ")}.` : ""} Then say what your character gets up to.`,
+    );
+  }
+  const hooks = (await hall.post<{ result: string }>("/api/downtime/close")).result;
+  await gmTurn(`Downtime is over. What came of it (weave these in over time; don't reveal which rumors are false):\n${hooks}\n\nNarrate the morning after in a few lines, then continue the story.`);
+}
+
 /** A fallen character's seat gets a newcomer, once the party is out of combat. */
 async function seatNewcomers() {
   const t = await table();
@@ -271,7 +322,9 @@ async function combatStep(c: NonNullable<Table["combat"]>) {
   else {
     const me = await character(cur.id);
     const s = players.get(cur.id);
+    const hs = hirelings.get(cur.id);
     if (me.statuses.some((x) => x.name === "Dying")) await hall.post("/api/combat/death-save", { id: cur.id });
+    else if (me.conscious && hs) await hirelingTurn(hs, true);
     else if (me.conscious && s) {
       await playerTurn(s, `It's your turn in the fight (round ${c.round}). You're in the ${me.zone} line with ${me.hp}/${me.maxHp} HP. Take your action (and a free move if you want), then say what you do.`);
     }
@@ -293,7 +346,7 @@ async function combatStep(c: NonNullable<Table["combat"]>) {
 async function exploreStep() {
   // Time passes outside combat too: on grim, the dying keep bleeding, and something may come out of the dark.
   const t0 = await table();
-  for (const p of t0.players.filter((x) => x.dying)) await hall.post("/api/combat/death-save", { id: p.id });
+  for (const p of [...t0.players, ...t0.hirelings].filter((x) => x.dying)) await hall.post("/api/combat/death-save", { id: p.id });
   if (t0.grim && (await hall.post<{ result: string | null }>("/api/wander-check")).result) {
     await gmTurn("Something has found the party (a wandering encounter has started). Describe it arriving, fast and frightening.");
     return;
@@ -308,6 +361,11 @@ async function exploreStep() {
     if (upIds.includes(cand.id)) s = cand;
   }
   if (s) await playerTurn(s, `It's your turn. ${sp?.id === s.id ? `The GM says to you: "${sp.prompt}"` : "The GM looks to you."}`);
+  await seatHirelings();
+  for (const h of (await table()).hirelings.filter((x) => x.order && x.conscious)) {
+    const hs = hirelings.get(h.id);
+    if (hs) await hirelingTurn(hs, false);
+  }
   await gmTurn();
 }
 
@@ -325,7 +383,9 @@ async function play() {
     }
     if (t.ended) break;
     await seatNewcomers();
-    if (t.council) await runCouncil(t.council.question).then(() => gmTurn("The council has spoken (see above). Carry out the party's decision and continue."));
+    await seatHirelings();
+    if (t.downtime) await runDowntime();
+    else if (t.council) await runCouncil(t.council.question).then(() => gmTurn("The council has spoken (see above). Carry out the party's decision and continue."));
     else if (t.combat) await combatStep(t.combat);
     else await exploreStep();
     if (turn >= MAX_TURNS + 20 && !(await table()).ended) {
@@ -360,5 +420,5 @@ try {
   await hall.post("/api/usage-limit", { detail: e.message });
   console.log(`[runner] subscription usage window spent, session paused: ${e.message}`);
 } finally {
-  await Promise.all([gm, ...players.values()].map((s) => s.close()));
+  await Promise.all([gm, ...players.values(), ...hirelings.values()].map((s) => s.close()));
 }

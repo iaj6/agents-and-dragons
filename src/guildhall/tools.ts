@@ -115,9 +115,43 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
       plan_id: z.string().describe("Plan id like p1"),
     }, ({ plan_id }) => game.vote(me, plan_id));
 
+    reg("hire", "Hire someone in town (not in the wild). They cost gold up front and a daily wage from you. Hirelings fight, carry torches, walk point, and follow orders, more or less. Ask with no name to see who's for hire here.", {
+      who: z.string().describe("Hireling id or name (or anything, to see who's available)"),
+    }, ({ who }) => game.hire(me, who));
+
+    reg("order", "Tell one of the party's hirelings what to do. Keep it short and simple: they aren't clever, and they sometimes mishear.", {
+      hireling: z.string().describe("Hireling id or name"),
+      instruction: z.string().describe("The order, in plain words"),
+    }, ({ hireling, instruction }) => game.order(me, hireling, instruction));
+
+    reg("rally", "Steady a panicking hireling before they run: persuade them (kind) or intimidate them (works, but they'll like you less).", {
+      hireling: z.string(),
+      how: z.enum(["persuasion", "intimidation"]),
+    }, ({ hireling, how }) => game.rally(me, hireling, how));
+
+    reg("downtime", "During downtime in town, spend the day on one thing: carouse (spend gold: 10 for a quiet night, 30 for a real one, 100 for a legend; turns gold into XP, with consequences), work (earn gold with a skill), research (dig up what the town knows about something), or recover (back to full, head clear).", {
+      activity: z.enum(["carouse", "work", "research", "recover"]),
+      gold: z.number().int().min(0).optional().describe("For carousing: how much to spend"),
+      detail: z.string().optional().describe("For work: the skill (e.g. athletics, performance); for research: the topic"),
+    }, ({ activity, gold, detail }) => game.downtime(me, activity, gold ?? 0, detail ?? ""));
+
     reg("propose_spell", "After leveling up, write a new spell for yourself as a SKILL.md and submit it for the GM's balance review.\n\nFormat:\n---\nname: kebab-case-name\ndescription: one line\nlevel: <your level>\nslot_cost: 0-3\neffect: damage | heal | buff | utility\ntarget: enemy | all_enemies | ally | self\ndice: 2d6   (damage/heal only)\nstatus: Validated | Raging | Shielded | Inspired | Hasted   (buff only)\n---\n\nA paragraph describing the spell.", {
       skill_md: z.string(),
     }, ({ skill_md }) => game.proposeSpell(me, skill_md));
+  }
+
+  if (who.role === "hireling") {
+    reg("get_sheet", "Look at yourself: HP, what you carry, who hired you.", {}, () => game.sheetText(game.char(me)));
+    reg("attack", "Hit an enemy (on your turn in a fight).", {
+      target: z.string().describe("Enemy id like m1"),
+    }, ({ target }) => game.attack(me, target, false));
+    reg("move", "Step between the front line and the back line (free).", { zone: z.enum(["front", "back"]) }, ({ zone }) => game.move(me, zone));
+    reg("retreat", "Try to get away from the fight.", {}, () => game.retreat(me));
+    reg("stabilize", "Try to stop a dying person's bleeding.", { target: z.string() }, ({ target }) => game.stabilize(me, target));
+    reg("use_potion", "Drink a healing potion you carry, or give it to someone.", { target: z.string().optional() }, ({ target }) => game.usePotion(me, target));
+    reg("claim_loot", "Pick something up off the loot pile.", { what: z.string() }, ({ what }) => game.claimLoot(me, what));
+    reg("give", "Give gold or an item to someone.", { what: z.string(), to: z.string() }, ({ what, to }) => game.give(me, what, to));
+    reg("search", "Look around carefully (for traps, for shiny things).", {}, () => game.search(me));
   }
 
   if (who.role === "dm") {
@@ -138,6 +172,14 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
     reg("start_combat", "Start one of this location's encounters. The Guild Hall rolls initiative and runs the enemies' turns; you narrate each round.", {
       encounter: z.string().describe("Encounter id from get_state"),
     }, ({ encounter }) => game.startCombat(encounter));
+
+    reg("call_downtime", "In a safe place (a town, an inn), give the party a day of downtime: each hero carouses, works, researches or recovers, and you get hooks to weave into the story. Costs a day. Hirelings can be hired then too.", {}, () => game.callDowntime());
+
+    reg("adjust_loyalty", "A hireling's loyalty (-3..+3) changes because of how they're treated in the story: praised, fed, protected (+), bullied, used as bait, cheated (-). Payment, shares and rescues are tracked automatically.", {
+      hireling: z.string(),
+      delta: z.number().int().min(-2).max(2),
+      reason: z.string(),
+    }, ({ hireling, delta, reason }) => game.adjustLoyalty(hireling, delta, reason));
 
     reg("delve", "The party pushes deeper into a dark, dangerous place: the Guild Hall stocks the next room (empty, a trap, a hazard, a monster, someone to talk to, or a lair with treasure) and tells you what's hidden. Moving on sets off any trap they didn't find. Costs torchlight. Use it whenever they explore further instead of traveling somewhere named.", {}, () => game.delve());
 

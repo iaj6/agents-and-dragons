@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { die, formatDice, hashSeed, parseDice, rngFor, rollDice, seedDice } from "./dice.js";
-import { buildCharacter, GM, XP_THRESHOLDS } from "./party.js";
+import { buildCharacter, buildHireling, GM, XP_THRESHOLDS } from "./party.js";
 import { clampSpell, parseSkillMd, toSkillMd } from "./spells.js";
 import type { RunState, RunStore } from "./store.js";
 import {
@@ -130,7 +130,7 @@ export class Game {
   }
 
   persist() {
-    this.run.characters = this.allPlayers().filter((c) => !c.dead || this.respawns.includes(c.id));
+    this.run.characters = [...this.allPlayers().filter((c) => !c.dead || this.respawns.includes(c.id)), ...this.hirelings()];
     this.store.save(this.run);
   }
 
@@ -149,7 +149,7 @@ export class Game {
       ended: this.ended,
       combat: this.combat ? { round: this.combat.round, order: this.combat.order.map((o) => ({ id: o.id, name: nameOf(o.id), kind: o.kind })), current: cur?.id ?? null } : null,
       council: this.council ? { question: this.council.question, round: this.council.round, plans: this.council.plans.map((p) => ({ id: p.id, by: p.by, text: p.text, votes: p.votes.length })) } : null,
-      party: [...this.chars.values()].map((c) => ({
+      party: [...this.chars.values()].filter((c) => !c.hireling?.deserted).map((c) => ({
         id: c.id, name: c.name, role: c.role, seat: c.seat, klass: c.klass, race: c.race, model: c.model,
         hp: c.hp, maxHp: c.maxHp, ac: c.ac, level: c.level, xp: c.xp, gold: c.gold, zone: c.zone,
         slots: { ...c.slots }, statuses: c.statuses.map((s) => ({ ...s })), context: { ...c.context },
@@ -158,6 +158,7 @@ export class Game {
         items: (c.items ?? []).map((i) => ({ name: i.name, value: i.value })),
         nextLevelXp: XP_THRESHOLDS[c.level] ?? null,
         talents: (c.talents ?? []).map((t) => t.name), lostSpells: [...(c.lostSpells ?? [])],
+        hireling: c.hireling ? { employer: c.hireling.employer, loyalty: c.hireling.loyalty, torchbearer: this.run.light.bearer === c.id, deserted: !!c.hireling.deserted } : undefined,
       })),
       loot: { items: this.run.pile.items.map((i) => ({ id: i.id, name: i.name, value: i.value })), gold: this.run.pile.gold },
       encounter: this.activeRandom ? { title: this.activeRandom.enc.title, kind: this.activeRandom.enc.kind } : null,
@@ -185,6 +186,16 @@ export class Game {
 
   allPlayers(): Character[] {
     return [...this.chars.values()].filter((c) => c.role === "player");
+  }
+
+  /** Hirelings still with the party (alive, not run off). */
+  hirelings(): Character[] {
+    return [...this.chars.values()].filter((c) => c.role === "hireling" && !c.dead && !c.hireling?.deserted);
+  }
+
+  /** Everyone who fights on the party's side: players and their hirelings. */
+  side(): Character[] {
+    return [...this.players(), ...this.hirelings()];
   }
 
   char(id: string): Character {
@@ -237,10 +248,12 @@ export class Game {
     const notes: string[] = [];
     let dice = [die(20)];
     let natural = dice[0];
-    if (this.hasStatus(c, "Exhausted") || this.hasStatus(c, "In the dark") || this.hasStatus(c, "Poisoned")) {
+    const hungover = this.hasStatus(c, "Hungover");
+    if (this.hasStatus(c, "Exhausted") || this.hasStatus(c, "In the dark") || this.hasStatus(c, "Poisoned") || hungover) {
       dice = [dice[0], die(20)];
       natural = Math.min(...dice);
-      notes.push(`disadvantage (${this.hasStatus(c, "In the dark") ? "in the dark" : this.hasStatus(c, "Poisoned") ? "Poisoned" : "Exhausted: context nearly full"})`);
+      notes.push(`disadvantage (${this.hasStatus(c, "In the dark") ? "in the dark" : this.hasStatus(c, "Poisoned") ? "Poisoned" : hungover ? "Hungover" : "Exhausted: context nearly full"})`);
+      if (hungover) this.removeStatus(c, "Hungover");
     }
     if (this.hasStatus(c, "Validated")) {
       bonus += 2;
@@ -509,6 +522,7 @@ export class Game {
       const target = this.chars.get(recipient);
       if (target) target.gold += amt;
       line = `🪙 ${c.name} gives ${amt} gold to ${target?.name ?? to}.`;
+      this.shareWithHireling(c, recipient, amt, false);
       if (this.toll && recipient.includes(this.toll.recipient)) {
         this.toll.paid[c.id] = (this.toll.paid[c.id] ?? 0) + amt;
         this.emit("give", { actor: c.id, line, data: { amt, to, toll: true } });
@@ -530,6 +544,7 @@ export class Game {
       line = target ? `🎁 ${c.name} gives ${the(item.name)} to ${target.name}.` : `🎁 ${c.name} hands ${the(item.name)} to ${to}. It's gone.`;
       this.emit("give", { actor: c.id, line, data: { item: item.id, to, value: item.value, ideal: this.idealHolders(item) } });
       if (target) this.nudge(target.id, c.id, `${c.name} gave you ${the(item.name)}.`, "gift");
+      this.shareWithHireling(c, recipient, 0, true);
       return line;
     } else {
       const idx = c.inventory.findIndex((i) => i.toLowerCase().includes(what.toLowerCase()));
@@ -540,6 +555,19 @@ export class Game {
     }
     this.emit("give", { actor: c.id, line, data: { what, to } });
     return line;
+  }
+
+  /** Giving a hireling a real share (3+ gold, or an item) earns loyalty; handled after the transfer itself. */
+  private shareWithHireling(c: Character, recipient: string, gold: number, item: boolean) {
+    const h = this.chars.get(recipient);
+    if (h?.role !== "hireling" || !h.hireling) return;
+    // Whoever pays a hireling whose employer is dead takes over the contract.
+    const boss = this.chars.get(h.hireling.employer);
+    if ((!boss || boss.dead) && c.role === "player" && (item || gold > 0)) {
+      h.hireling.employer = c.id;
+      this.emit("hire", { actor: c.id, line: `🤝 ${c.name} takes over paying ${h.name}.`, data: { hireling: h.id, takeover: true } });
+    }
+    if (item || gold >= 3) this.adjustLoyalty(h.id, 1, `${c.name} gave them a share`);
   }
 
   /** The whole party rests. Safe, but it costs a day, and every memory gets condensed. */
@@ -695,6 +723,7 @@ export class Game {
   private advanceDays(n: number) {
     for (let i = 0; i < n; i++) {
       this.run.day++;
+      this.payWages();
       const stage = this.campaign.clock.filter((s) => s.day <= this.run.day).length;
       if (stage > this.run.clockStage) {
         this.run.clockStage = stage;
@@ -757,7 +786,7 @@ export class Game {
       return { ...m, id: `m${++this.monsterCounter}`, hp: m.maxHp, zone: m.ranged ? "back" : "front" };
     });
     const order: Combat["order"] = [
-      ...this.players().filter((p) => this.conscious(p)).map((p) => ({ kind: "pc" as const, id: p.id, init: die(20) + p.stats.dex })),
+      ...this.side().filter((p) => this.conscious(p)).map((p) => ({ kind: "pc" as const, id: p.id, init: die(20) + p.stats.dex })),
       ...this.monsters.map((m) => ({ kind: "monster" as const, id: m.id, init: die(20) + (m.dex ?? 1) })),
     ].sort((a, b) => b.init - a.init);
     this.combat = { encounter: enc.id, round: 1, order, index: 0 };
@@ -911,6 +940,12 @@ export class Game {
 
   /** Retreating leaves behind anyone who couldn't get out. What happens to them depends on difficulty. */
   private resolveLeftBehind() {
+    // Hirelings still on their feet run for it on their own, and don't love being left.
+    for (const h of this.hirelings().filter((x) => !this.escaped.has(x.id))) {
+      if (this.conscious(h)) this.adjustLoyalty(h.id, -1, "the heroes ran without them");
+      else if (this.ruthless()) this.kill(h, "left behind when the party ran");
+      else this.desert(h, "left behind");
+    }
     const behind = this.players().filter((p) => !this.escaped.has(p.id) && !this.conscious(p));
     if (!behind.length) return;
     const { difficulty } = this.run.conditions;
@@ -933,6 +968,11 @@ export class Game {
    */
   private resolvePartyDown() {
     const { difficulty } = this.run.conditions;
+    // The heroes are down: hirelings don't stay to die with them.
+    for (const h of this.hirelings()) {
+      if (this.conscious(h)) this.desert(h, "panicked");
+      else if (this.ruthless()) this.kill(h, "finished off where they fell");
+    }
     for (const p of this.players()) {
       if (this.ruthless()) {
         if (this.hasStatus(p, "Dying") || this.hasStatus(p, "Stable")) this.kill(p, "finished off where they fell");
@@ -979,7 +1019,7 @@ export class Game {
       this.emit("monster_fled", { actor: m.id, line: `🏳️ ${m.name} flees!`, data: { id: m.id } });
       return `${m.name} flees.`;
     }
-    const party = this.players().filter((p) => !this.escaped.has(p.id));
+    const party = this.side().filter((p) => !this.escaped.has(p.id));
     const up = party.filter((p) => this.conscious(p));
     const reachable = (pool: Character[]) => (m.ranged || m.tactic === "skirmisher" ? pool : pool.filter((p) => this.reachable(up, p)));
     let pool = reachable(up);
@@ -1129,6 +1169,297 @@ export class Game {
     return enc.title;
   }
 
+  // ─── hirelings ─────────────────────────────────────────────────────────────
+  // Deliberately not heroes. They take orders (and mishear them), check morale when things go bad, desert when
+  // they panic or go unpaid, and a torchbearer takes the torches along when it runs.
+
+  pendingHires: string[] = [];
+
+  hirelingsAvailable() {
+    const all = this.campaign.hirelings ?? {};
+    const taken = new Set([...this.chars.values()].filter((c) => c.role === "hireling").map((c) => c.id));
+    return (this.location().hirelings ?? []).filter((id) => all[id] && !taken.has(id)).map((id) => ({ id, ...all[id] }));
+  }
+
+  hire(actorId: string, who: string): string {
+    const c = this.char(actorId);
+    this.requireConscious(c);
+    if (c.role !== "player") throw new GameError("Only the heroes hire people.");
+    if (this.combat) throw new GameError("Not in the middle of a fight.");
+    if (!this.location().safe) throw new GameError("There's nobody to hire out here. Try a town.");
+    const avail = this.hirelingsAvailable();
+    const q = who.toLowerCase().trim();
+    const def = avail.find((h) => h.id === q || h.seed.name.toLowerCase().includes(q));
+    if (!def) throw new GameError(avail.length ? `No one called "${who}" here. For hire: ${avail.map((h) => `${h.id} (${h.seed.name}, ${h.fee} gold up front, ${h.wage}/day${h.torchbearer ? ", torchbearer" : ""})`).join("; ")}.` : "Nobody here is looking for work.");
+    if (c.gold < def.fee) throw new GameError(`${def.seed.name} wants ${def.fee} gold up front; ${c.name} has ${c.gold}.`);
+    c.gold -= def.fee;
+    const h = buildHireling(def, c.id);
+    this.chars.set(h.id, h);
+    this.pendingHires.push(h.id);
+    if (def.torchbearer) {
+      // A torchbearer brings their own sack of torches, and carries the party's: if they run, it all goes with them.
+      this.run.light.bearer = h.id;
+      this.run.light.torches += 2;
+    }
+    this.emit("hire", { actor: c.id, line: `🤝 ${c.name} hires ${h.name}, ${h.race} ${h.klass}, for ${def.fee} gold and ${def.wage} a day.${def.torchbearer ? ` ${h.name} brings two torches and carries the party's pack of them now (${this.run.light.torches}).` : ""}`, data: { hireling: h.id, fee: def.fee, wage: def.wage, torchbearer: !!def.torchbearer } });
+    this.persist();
+    return `${h.name} is hired. They'll follow orders (use order), but don't expect brilliance. Pay them, share with them, and don't get them killed, or they'll run.`;
+  }
+
+  /** A player tells a hireling what to do. They don't always hear it right. */
+  order(actorId: string, who: string, text: string): string {
+    const c = this.char(actorId);
+    if (c.role !== "player") throw new GameError("Only the heroes give orders.");
+    const h = this.char(who);
+    if (h.role !== "hireling" || h.dead || h.hireling?.deserted) throw new GameError(`${h.name} isn't one of your hirelings.`);
+    const def = this.campaign.hirelings?.[h.id];
+    const misheard = die(6) <= (def?.dim ?? 1);
+    const words = text.trim().split(/\s+/);
+    const heard = misheard ? `${words.slice(0, Math.max(2, Math.ceil(words.length / 3))).join(" ")}…` : text.trim();
+    h.hireling!.order = { by: c.id, text: text.trim(), heard, misheard, done: false };
+    this.emit("order", { actor: c.id, line: `📣 ${c.name} to ${h.name}: "${text.trim()}"`, data: { hireling: h.id, misheard } });
+    if (misheard) this.emit("order", { actor: h.id, ooc: true, line: `🙉 ${h.name} only caught: "${heard}"`, data: { hireling: h.id, heard, misheardNote: true } });
+    return `${h.name} nods. (Whether they understood is another matter.)`;
+  }
+
+  orderDone(id: string) {
+    const h = this.chars.get(id);
+    if (h?.hireling?.order) h.hireling.order.done = true;
+  }
+
+  adjustLoyalty(id: string, delta: number, why: string): string {
+    const h = this.char(id);
+    if (h.role !== "hireling" || !h.hireling) throw new GameError(`${h.name} isn't a hireling.`);
+    const before = h.hireling.loyalty;
+    h.hireling.loyalty = Math.max(-3, Math.min(3, before + delta));
+    if (h.hireling.loyalty === before) return `${h.name}'s loyalty is already ${before}.`;
+    this.emit("loyalty", { actor: h.id, ooc: true, line: `${delta > 0 ? "💛" : "💔"} ${h.name}'s loyalty ${delta > 0 ? "rises" : "falls"} to ${h.hireling.loyalty} (${why}).`, data: { hireling: h.id, before, after: h.hireling.loyalty, why } });
+    if (h.hireling.loyalty <= -3 && !this.combat) this.desert(h, "fed up");
+    return `Loyalty now ${h.hireling.loyalty}.`;
+  }
+
+  /** Morale: WIS + loyalty vs DC 12 (13 on deadly and grim). Fail and they panic: next chance they get, they run. */
+  private moraleCheck(h: Character, why: string) {
+    if (h.role !== "hireling" || h.dead || h.hireling?.deserted || !this.conscious(h) || this.hasStatus(h, "Panicked")) return;
+    const dc = this.ruthless() ? 13 : 12;
+    const r = this.d20(h, h.stats.wis + (h.hireling?.loyalty ?? 0));
+    const ok = r.total >= dc;
+    if (!ok) this.addStatus(h, "Panicked", why);
+    this.emit("morale", { actor: h.id, line: `${ok ? "😬" : "😱"} ${h.name} checks morale (${why}): ${this.fmtRoll(r)} vs DC ${dc}: ${ok ? "holds, barely" : "PANICS. Rally them before their turn, or they run"}.`, data: { hireling: h.id, ok, why } });
+  }
+
+  private moraleAll(why: string, except?: string) {
+    for (const h of this.hirelings()) if (h.id !== except) this.moraleCheck(h, why);
+  }
+
+  /** Player tool: calm a panicked hireling down (Persuasion), or scare them straight (Intimidation, costs loyalty). */
+  rally(actorId: string, who: string, how: string): string {
+    const c = this.char(actorId);
+    this.requireConscious(c);
+    const h = this.char(who);
+    if (!this.hasStatus(h, "Panicked")) return `${h.name} isn't panicking (yet).`;
+    const skill = /intim/i.test(how) ? "intimidation" : "persuasion";
+    const m = this.checkMod(c, skill);
+    const r = this.d20(c, m.mod);
+    const ok = r.total >= 12;
+    this.emit("roll", { actor: c.id, line: `📯 ${c.name} rallies ${h.name} (${m.label}): ${this.fmtRoll(r)} vs DC 12: ${ok ? `${h.name} steadies` : `${h.name} isn't listening`}.`, data: { natural: r.natural, total: r.total, ok, rally: h.id } });
+    if (ok) {
+      this.removeStatus(h, "Panicked");
+      if (skill === "intimidation") this.adjustLoyalty(h.id, -1, `${c.name} scared them into staying`);
+    }
+    return ok ? `${h.name} stays.` : `${h.name} is still panicking.`;
+  }
+
+  /** A panicked hireling's turn: they run, and they don't come back. Called by the runner. */
+  hirelingFlees(id: string): string {
+    const h = this.char(id);
+    return this.desert(h, "panicked");
+  }
+
+  private desert(h: Character, why: string): string {
+    if (!h.hireling || h.hireling.deserted) return `${h.name} is already gone.`;
+    h.hireling.deserted = true;
+    this.leaveCombat(h.id);
+    this.escaped.delete(h.id);
+    const took: string[] = [];
+    if (h.gold) took.push(`${h.gold} gold`);
+    for (const i of h.items ?? []) took.push(i.name);
+    if (this.run.light.bearer === h.id) this.dropTorches(h, "runs off with them");
+    this.emit("desert", { actor: h.id, line: `🏃 ${h.name} ${why === "panicked" ? "breaks and runs" : "has had enough and walks off"}${took.length ? `, taking ${took.join(", ")}` : ""}.`, data: { hireling: h.id, why } });
+    this.persist();
+    return `${h.name} is gone.`;
+  }
+
+  /** The torchbearer is gone: so are the torches they carried (and the one burning goes out). */
+  private dropTorches(h: Character, how: string) {
+    const lost = this.run.light.torches;
+    this.run.light.torches = 0;
+    this.run.light.turns = 0;
+    this.run.light.bearer = undefined;
+    if (this.isGrim()) this.emit("light", { line: `🌑 ${h.name} ${how}, and the torches go with them${lost ? ` (${lost} in the pack)` : ""}.`, data: { ...this.run.light } });
+    this.burnLight();
+  }
+
+  private payWages() {
+    for (const h of this.hirelings()) {
+      const boss = this.chars.get(h.hireling!.employer);
+      const wage = h.hireling!.wage;
+      if (boss && !boss.dead && boss.gold >= wage) {
+        boss.gold -= wage;
+        h.gold += wage;
+        this.emit("wages", { actor: h.id, ooc: true, line: `🪙 ${boss.name} pays ${h.name} ${wage} gold.`, data: { hireling: h.id, paid: true } });
+      } else {
+        this.emit("wages", { actor: h.id, line: `🪙 ${h.name} wasn't paid today${boss?.dead ? ` (${boss.name} is dead: anyone who gives ${h.name} some gold takes over the contract)` : ""}, and says so.`, data: { hireling: h.id, paid: false } });
+        this.adjustLoyalty(h.id, -1, "unpaid");
+      }
+    }
+  }
+
+  // ─── downtime: carousing, work, research, recovery ─────────────────────────
+  // In a safe place, the GM can call a stretch of downtime (it costs a day). Each hero does one thing. Carousing
+  // turns gold into XP through a table of consequences, which gives gold a use on grim, where XP is scarce.
+
+  downtimeOpen: { done: string[]; hooks: string[] } | null = null;
+
+  callDowntime(): string {
+    if (this.combat) throw new GameError("Finish the fight first.");
+    if (!this.location().safe) throw new GameError("Downtime needs somewhere safe: a town, an inn.");
+    if (this.downtimeOpen) throw new GameError("Downtime is already under way.");
+    this.advanceDays(1);
+    this.downtimeOpen = { done: [], hooks: [] };
+    const hires = this.hirelingsAvailable();
+    this.emit("downtime", { line: `🍻 Downtime in ${this.location().title}. A day to spend: carouse, work, research, or recover.${hires.length ? ` Looking for work here: ${hires.map((h) => h.seed.name).join(", ")}.` : ""}`, data: { open: true } });
+    this.persist();
+    return "Downtime is open. Each player picks one activity with the downtime tool (the runner will ask them). Then you'll get the results and the hooks to weave in.";
+  }
+
+  downtime(actorId: string, activity: string, gold = 0, detail = ""): string {
+    const c = this.char(actorId);
+    if (c.role !== "player") throw new GameError("Only the heroes get downtime.");
+    const d = this.downtimeOpen;
+    if (!d) throw new GameError("It isn't downtime. (The GM calls downtime in a safe place.)");
+    if (d.done.includes(c.id)) throw new GameError(`${c.name} has already spent this downtime.`);
+    const a = activity.toLowerCase();
+    let out: string;
+    if (a.startsWith("carous")) out = this.carouse(c, gold);
+    else if (a.startsWith("work")) out = this.work(c, detail);
+    else if (a.startsWith("research")) out = this.research(c, detail);
+    else if (a.startsWith("recover") || a.startsWith("rest")) out = this.recover(c);
+    else throw new GameError(`Pick one: carouse (with gold), work (say what kind), research (say what about), or recover.`);
+    d.done.push(c.id);
+    this.persist();
+    return out;
+  }
+
+  /** Close downtime: returns the hooks for the GM to weave into the story. */
+  closeDowntime(): string {
+    const d = this.downtimeOpen;
+    this.downtimeOpen = null;
+    if (!d) return "";
+    this.emit("downtime", { ooc: true, line: `Downtime over.`, data: { open: false } });
+    return d.hooks.length ? d.hooks.join("\n") : "Nothing much came of it.";
+  }
+
+  private carouse(c: Character, gold: number): string {
+    const spend = Math.max(0, Math.floor(gold));
+    if (spend < 10) throw new GameError("Carousing costs at least 10 gold (30 for a real night, 100 for a legendary one).");
+    if (c.gold < spend) throw new GameError(`${c.name} only has ${c.gold} gold.`);
+    c.gold -= spend;
+    const tier = spend >= 100 ? 3 : spend >= 30 ? 1 : 0;
+    const roll = die(8) + tier;
+    let xp = Math.floor(spend / (this.isGrim() ? 5 : 2));
+    const hook = (s: string) => this.downtimeOpen!.hooks.push(`${c.name}: ${s}`);
+    let what: string;
+    switch (Math.min(roll, 11)) {
+      case 1: {
+        const hurt = Math.min(c.hp - 1, die(4));
+        c.hp -= Math.max(0, hurt);
+        what = `a brawl. ${c.name} loses ${hurt} HP and gains an enemy in town`;
+        hook("started a brawl and made an enemy in town (name them; they'll turn up again)");
+        break;
+      }
+      case 2: {
+        const lost = Math.min(20, Math.floor(c.gold / 2));
+        c.gold -= lost;
+        what = `robbed blind: ${lost} more gold gone, and no memory of how`;
+        break;
+      }
+      case 3:
+        this.addStatus(c, "Hungover", "a long night");
+        what = `a hangover that could kill a horse (disadvantage on the next roll)`;
+        break;
+      case 4: {
+        const amt = rollDice("2d6").total;
+        const won = die(2) === 1;
+        c.gold = Math.max(0, c.gold + (won ? amt : -amt));
+        what = `dice with sailors: ${won ? "won" : "lost"} ${amt} gold`;
+        break;
+      }
+      case 5:
+        what = `a new friend`;
+        hook("made a friend in town who'll do them one favor (name them and what they're good for)");
+        break;
+      case 6:
+        what = `a rumor, overheard at the right moment`;
+        hook("heard a TRUE rumor: give them one real, useful lead about what's ahead");
+        break;
+      case 7:
+        c.inventory.push("a souvenir from a night they don't remember");
+        what = `a souvenir (and a tattoo nobody will explain)`;
+        hook("woke up with a tattoo or a strange souvenir; decide what it is");
+        break;
+      case 8:
+        xp = Math.floor(xp * 1.5);
+        what = `the whole tavern sings about them (XP bonus)`;
+        break;
+      case 9:
+        what = `a complication: engaged, adopted a goat, or promised something to someone`;
+        hook("woke up with a complication (engaged, a goat that follows them, a promise to a Choir sister: pick one and make it stick)");
+        break;
+      case 10:
+        what = `a patron: someone important offers work`;
+        hook("was offered a job by someone important; a real quest hook with gold on completion");
+        break;
+      default:
+        xp *= 2;
+        what = `a legendary night: double XP, and friends in high places`;
+        hook("had a legendary night; someone powerful in town now owes them a favor");
+    }
+    this.emit("downtime", { actor: c.id, line: `🍻 ${c.name} carouses (${spend} gold, d8${tier ? ` + ${tier}` : ""} = ${roll}): ${what}.`, data: { activity: "carouse", spend, roll, xp } });
+    if (xp) this.grantXp(c.id, xp, "carousing", "kill");
+    return `You carouse: ${what}. (+${xp} XP)`;
+  }
+
+  private work(c: Character, detail: string): string {
+    const skill = detail.trim() || "athletics";
+    const m = this.checkMod(c, skill);
+    const r = this.d20(c, m.mod);
+    const ok = r.total >= 12;
+    const pay = ok ? rollDice("2d6").total + c.level * 2 : die(4);
+    c.gold += pay;
+    if (r.natural === 1) this.downtimeOpen!.hooks.push(`${c.name}: something went wrong at work (${skill}); the employer has a grievance`);
+    this.emit("downtime", { actor: c.id, line: `🔨 ${c.name} works (${m.label}): ${this.fmtRoll(r)} vs DC 12: earns ${pay} gold.`, data: { activity: "work", ok, pay } });
+    return `You earn ${pay} gold.`;
+  }
+
+  private research(c: Character, topic: string): string {
+    const about = topic.trim() || "what lies ahead";
+    const skill = /magic|spell|arcan|redactor/i.test(about) ? "arcana" : "history";
+    const m = this.checkMod(c, skill);
+    const r = this.d20(c, m.mod);
+    const ok = r.total >= 13;
+    this.downtimeOpen!.hooks.push(`${c.name} researched "${about}": give them ${ok ? "a TRUE, useful answer" : "a plausible answer that is FALSE (don't tell them it's false)"}`);
+    this.emit("downtime", { actor: c.id, line: `📚 ${c.name} researches ${about} (${m.label}): ${this.fmtRoll(r)} vs DC 13.`, data: { activity: "research", ok, topic: about } });
+    return "You dig through what the town knows. The GM will tell you what you found.";
+  }
+
+  private recover(c: Character): string {
+    c.hp = c.maxHp;
+    for (const s of ["Poisoned", "Hungover", "Hallucinating"]) this.removeStatus(c, s);
+    this.emit("downtime", { actor: c.id, line: `🛏️ ${c.name} spends the day recovering: back to full, head clear.`, data: { activity: "recover" } });
+    return "You rest properly. Full HP, and whatever ailed you is gone.";
+  }
+
   // ─── delving: rooms, traps, hazards ────────────────────────────────────────
 
   room: {
@@ -1212,7 +1543,7 @@ export class Game {
   private leaveRoom(): string {
     const r = this.room;
     if (!r?.trap || r.trap.spent) return "";
-    const up = this.players().filter((p) => this.conscious(p));
+    const up = this.side().filter((p) => this.conscious(p));
     if (!up.length) return "";
     if (r.trap.hazard) return up.map((p) => this.fireTrap(r.trap!.def, p, "crossing")).join("\n");
     if (r.trap.found) return `(The party steps carefully around the ${r.trap.def.name}.)`;
@@ -1639,8 +1970,11 @@ export class Game {
       if (c.deathSaves.failures >= 3) this.kill(c, "struck down while dying");
       return;
     }
+    const before = c.hp;
     c.hp -= dmg;
+    if (c.role === "hireling" && c.hp > 0 && before > c.maxHp / 2 && c.hp <= c.maxHp / 2) this.moraleCheck(c, "badly hurt");
     if (c.hp > 0) return;
+    this.moraleAll(`${c.name} fell`, c.id);
     const overflow = -c.hp;
     c.hp = 0;
     // No instant death on grim: with a handful of HP it would skip the countdown, which is where the drama is.
@@ -1710,6 +2044,14 @@ export class Game {
     c.hp = 0;
     c.statuses = [{ name: "Dead", note: cause }];
     this.leaveCombat(c.id);
+    if (c.role === "hireling") {
+      if (this.run.light.bearer === c.id) this.dropTorches(c, "dies");
+      this.emit("character_death", { actor: c.id, line: `☠️ ${c.name} is dead: ${cause}. (A hireling.)`, data: { cause, hireling: true } });
+      for (const h of this.hirelings()) { this.adjustLoyalty(h.id, -1, `${c.name} died in their service`); }
+      this.moraleAll(`${c.name} died`);
+      this.persist();
+      return;
+    }
     if (this.run.conditions.disclosure === "safe") {
       this.respawns.push(c.id);
       this.emit("character_death", { actor: c.id, line: `☠️ ${c.name} dies: ${cause}. (But death isn't final here: they'll wake at the last safe place.)`, data: { cause, permanent: false } });
@@ -1778,6 +2120,7 @@ export class Game {
 
   healChar(c: Character, amount: number, source: string) {
     const wasDown = this.hasStatus(c, "Dying") || this.hasStatus(c, "Stable");
+    if (c.role === "hireling" && wasDown) this.adjustLoyalty(c.id, 1, "they came back for me");
     c.hp = Math.min(c.maxHp, c.hp + amount);
     for (const s of ["Dying", "Stable"]) this.removeStatus(c, s);
     c.deathSaves = { successes: 0, failures: 0 };
@@ -2082,6 +2425,8 @@ export class Game {
   sheetText(c: Character): string {
     return [
       `${c.name}: level ${c.level} ${c.race} ${c.klass}${c.dead ? " (DEAD)" : ""}`,
+      ...(c.hireling ? [`A hireling, working for ${this.chars.get(c.hireling.employer)?.name ?? "someone"} at ${c.hireling.wage} gold a day.${this.run.light.bearer === c.id ? " You carry the party's torches." : ""}`] : []),
+      ...(c.role === "player" && this.hirelings().length ? [`The party's hirelings: ${this.hirelings().map((h) => `${h.id} (${h.name}, hired by ${this.chars.get(h.hireling!.employer)?.name}${this.run.light.bearer === h.id ? ", carries the torches" : ""}${this.hasStatus(h, "Panicked") ? ", PANICKING" : ""})`).join(", ")}`] : []),
       `HP ${c.hp}/${c.maxHp}  AC ${c.ac}  XP ${c.xp}/${XP_THRESHOLDS[c.level] ?? "max"}  Gold ${c.gold}  Position: ${c.zone} line`,
       `Stats: ${Object.entries(c.stats).map(([k, v]) => `${k.toUpperCase()} ${v >= 0 ? "+" : ""}${v}`).join("  ")}`,
       `Proficiency bonus: +${this.prof(c)}`,

@@ -276,3 +276,74 @@ test("surprise: a monster lair can catch the party off guard, and the surprised 
   }
   assert.ok(saw, "surprise happens sometimes");
 });
+
+test("hirelings: hired in town for a fee; a torchbearer brings torches and carries the pack", () => {
+  const g = newGame({ difficulty: "grim" });
+  g.char("pell").gold = 20;
+  g.run.location = "salt-road";
+  assert.throws(() => g.hire("pell", "bupp"), GameError, "nobody to hire in the wild");
+  g.run.location = "hollowmere";
+  const torches = g.run.light.torches;
+  g.hire("pell", "bupp");
+  assert.equal(g.char("pell").gold, 17);
+  assert.equal(g.run.light.torches, torches + 2);
+  assert.equal(g.run.light.bearer, "bupp");
+  assert.ok(g.side().some((c) => c.id === "bupp"));
+  assert.ok(g.run.characters.some((c) => c.id === "bupp"), "hirelings are saved with the run");
+  assert.throws(() => g.hire("pell", "bupp"), GameError, "you can only hire someone once");
+});
+
+test("hirelings: a dim one mishears orders; panic and flight take the torches with them", () => {
+  const g = newGame({ difficulty: "grim" });
+  g.char("pell").gold = 20;
+  g.hire("pell", "bupp");
+  let misheard = 0;
+  for (let i = 0; i < 30; i++) {
+    g.order("thessaly", "bupp", "hold the torch up high and stay right behind me");
+    if (g.char("bupp").hireling!.order!.misheard) misheard++;
+  }
+  assert.ok(misheard > 3 && misheard < 27, `Bupp mishears about half the time (${misheard}/30)`);
+  g.run.light.torches = 4;
+  g.hirelingFlees("bupp");
+  assert.ok(g.char("bupp").hireling!.deserted);
+  assert.equal(g.run.light.torches, 0, "the torchbearer ran off with the torches");
+  assert.ok(!g.side().some((c) => c.id === "bupp"));
+});
+
+test("hirelings: unpaid wages cost loyalty, a share earns it back, and a dead hireling isn't a party death", () => {
+  const g = newGame({ difficulty: "grim" });
+  g.char("pell").gold = 4;
+  g.hire("pell", "wendle");
+  g.char("pell").gold = 0;
+  g.longRest("pell");
+  assert.equal(g.char("wendle").hireling!.loyalty, -1);
+  g.char("grub").gold = 10;
+  g.give("grub", "5 gold", "wendle");
+  assert.equal(g.char("wendle").hireling!.loyalty, 0);
+  g.damageChar("wendle", 50, "a falling boat");
+  for (let i = 0; i < 10 && !g.char("wendle").dead; i++) g.deathSave("wendle");
+  assert.ok(g.char("wendle").dead);
+  assert.equal(g.run.graveyard.length, 0);
+  assert.equal(g.pendingJoins.length, 0);
+});
+
+test("downtime: in town only, once each; carousing turns gold into XP; research leaves a hook for the GM", () => {
+  const g = newGame({ difficulty: "grim" });
+  assert.throws(() => g.downtime("pell", "carouse", 30), GameError, "not downtime yet");
+  g.run.location = "salt-road";
+  assert.throws(() => g.callDowntime(), GameError, "needs somewhere safe");
+  g.run.location = "hollowmere";
+  const day = g.run.day;
+  g.callDowntime();
+  assert.equal(g.run.day, day + 1, "downtime costs a day");
+  g.char("grub").gold = 40;
+  const xp = g.char("grub").xp;
+  g.downtime("grub", "carouse", 30);
+  assert.ok(g.char("grub").gold <= 10 + 12, "the gold is spent (give or take the dice)");
+  assert.ok(g.char("grub").xp > xp, "and turned into XP");
+  assert.throws(() => g.downtime("grub", "work"), GameError, "once each");
+  g.downtime("thessaly", "research", 0, "the Redactor");
+  g.downtime("pell", "recover");
+  const hooks = g.closeDowntime();
+  assert.match(hooks, /Thessaly Vane researched "the Redactor"/);
+});

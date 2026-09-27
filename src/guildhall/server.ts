@@ -148,6 +148,9 @@ app.get("/api/table", runnerOnly, (_req, res) => {
     encounter: g.activeRandom ? { id: g.activeRandom.enc.id, title: g.activeRandom.enc.title, kind: g.activeRandom.enc.kind } : null,
     grim: g.isGrim(),
     light: g.isGrim() && g.location().dark ? { ...g.run.light } : null,
+    hirelings: g.hirelings().map((h) => ({ id: h.id, name: h.name, employer: h.hireling!.employer, conscious: g.conscious(h), dying: g.hasStatus(h, "Dying"), panicked: g.hasStatus(h, "Panicked"), order: h.hireling!.order && !h.hireling!.order.done ? { by: h.hireling!.order.by, heard: h.hireling!.order.heard } : null })),
+    pendingHires: g.pendingHires,
+    downtime: g.downtimeOpen ? { done: g.downtimeOpen.done, available: g.hirelingsAvailable().map((h) => `${h.id} (${h.seed.name}: ${h.fee} gold up front, ${h.wage}/day${h.torchbearer ? ", carries torches" : ""})`) } : null,
     seq: g.events.at(-1)?.seq ?? 0,
   });
 });
@@ -184,6 +187,14 @@ action("/api/join", (g, b) => {
   const c = g.joinReplacement(b.seat);
   return c ? { id: c.id, name: c.name, token: issueToken(c.id) } : null;
 });
+action("/api/hireling/seat", (g, b) => {
+  g.pendingHires = g.pendingHires.filter((x) => x !== b.id);
+  const h = g.char(b.id);
+  return { id: h.id, name: h.name, token: issueToken(h.id) };
+});
+action("/api/hireling/flee", (g, b) => g.hirelingFlees(b.id));
+action("/api/hireling/order-done", (g, b) => g.orderDone(b.id) ?? null);
+action("/api/downtime/close", (g) => g.closeDowntime());
 action("/api/usage-limit", (g, b) =>
   g.emit("status", { line: `⛺ The party makes camp: the gods of the subscription have run out of patience for now. The session pauses here.`, data: { detail: b.detail } }) && null,
 );

@@ -20,7 +20,7 @@ export class Agent implements Seat {
   constructor(
     readonly id: string,
     readonly name: string,
-    readonly role: "player" | "dm",
+    readonly role: "player" | "dm" | "hireling",
     readonly model: string,
     readonly system: string,
     private token: string,

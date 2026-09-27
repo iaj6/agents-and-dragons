@@ -34,6 +34,12 @@ const ART: Record<string, { size: "1024x1024" | "1536x1024"; prompt: string }> =
   "scene-brinecombe": { size: "1536x1024", prompt: `${SCENE} a grey fishing town harbor with a stone quay and fishing boats; at low tide the ribs of a sunken ship show beneath the water; townsfolk stand apart from each other on the quay.` },
   "scene-salt-stacks": { size: "1536x1024", prompt: `${SCENE} towers of pressed white salt blocks stacked to a vaulted ceiling, each block tagged with a tiny label, a tall archivist in spectacles of polished salt writing in a ledger.` },
   "scene-tidewrack-stair": { size: "1536x1024", prompt: `${SCENE} a narrow stair cut into a sea cliff descending into a dark sea cave where the tide has drawn far out; at the bottom waits a tall figure made of black ink strokes holding a ledger and a long black quill.` },
+  // Hirelings: not heroes
+  bupp: { size: "1024x1024", prompt: `${PORTRAIT} a tiny, dented, grubby little automaton built like a gully gnome, with a huge grin and a sack of torches over his shoulder, holding up a rock as if it were a treasure.` },
+  "mossy-tom": { size: "1024x1024", prompt: `${PORTRAIT} a nervous, gangly automaton with moss growing in its seams clutching a bundle of lit torches, eyes wide, mouth open mid-hum.` },
+  wendle: { size: "1024x1024", prompt: `${PORTRAIT} an earnest, puffed-up small automaton would-be hero wearing a saucepan as a helmet, brandishing a rusty spoon like a sword.` },
+  "nan-crabbe": { size: "1024x1024", prompt: `${PORTRAIT} a sly old squat automaton beachcomber in a coat with far too many bulging pockets, holding a shiny coin up to her eye.` },
+  "sister-unn": { size: "1024x1024", prompt: `${PORTRAIT} a stern but kind automaton in faded grey robes of a quiet order, a roll of bandages in one hand and a clapperless bell at her belt.` },
   // Act 2, beneath the Stair
   "scene-the-undertow": { size: "1536x1024", prompt: `${SCENE} flooded rock tunnels under the sea, knee-deep black water, faint glowing silt swirling around the legs of four small adventurers holding a single torch, pale eels in the dark water.` },
   "scene-the-quiet-harbor": { size: "1536x1024", prompt: `${SCENE} a peaceful hidden village in a vast dry cave around an underground lagoon, lamps of cold green flame, children floating paper boats, an old white-haired woman laughing.` },

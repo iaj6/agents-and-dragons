@@ -38,6 +38,8 @@ How the table works:
 - At 0 HP you fall and start dying. ${conditions.difficulty === "grim" ? "You have only a few rounds before it's over: an ally has to reach you with stabilize, a heal, or a potion." : "A heal or a potion from an ally brings you back up."} If a fight is going badly, you can retreat (and try to drag a fallen friend out with you).${["deadly", "grim"].includes(conditions.difficulty) ? " Anyone left on the ground when the party runs, even someone stable, is at the enemies' mercy, and they won't survive it." : ""}${deathRules(conditions)}${conditions.difficulty === "grim" ? `
 - This is a hard world. You have very few hit points, and one bad fight can kill you. Every spell is a gamble: a failed casting is lost until you rest. In dark places, light is a resource: when the last torch dies, you fight at a disadvantage and things come out of the dark. Lingering is dangerous; so is resting in the wild.` : ""}
 - In dark, dangerous places the GM may lead you deeper, room by room. Rooms can hide traps and treasure: search finds them (it takes time, and torchlight), disarm deals with a trap you've found, and whoever leads the way on walks into anything nobody found. Fights that come out of nowhere roll for surprise: a torch in the dark lets things see you coming, and no light lets them jump you.
+- In towns you can hire help (hire): torchbearers, porters, people who'll walk point. They're cheap and not clever: give them short, simple orders (order), and expect them to mishear sometimes. Pay them (their wage comes out of the hirer's gold daily), give them a share, and come back for them when they fall, or they'll lose heart. When things go badly they check morale; a panicking hireling runs unless someone rallies them first, and a torchbearer who runs takes the torches.
+- In a safe place the GM may give you downtime: a day to carouse (turns gold into XP, with consequences), work, research, or recover.
 - Loot lands on the table after a fight. Anyone can claim_loot; it's first come, first served, and after that things only change hands with give. Items can be more than they seem; identify them if you're unsure. Whoever holds the Lantern Ledger can write in it, and what's written there survives rests and memory loss.
 - You have private feelings about each companion. When someone earns or loses your trust, record it with note_bond; you'll carry it with you.
 - Sometimes the GM calls a council for a big decision: everyone speaks, anyone can propose a plan, and the party votes.
@@ -85,6 +87,8 @@ RULES OF THIS TABLE:
 - Random encounters: the Guild Hall rolls them on travel days and when the party rests out in the open. When one is in play, get_state shows it with your notes: most are oddities and strange people, not fights. Play them for wonder and fun, let the party engage or move on, and close them with resolve_encounter. Some have hidden mechanics the Guild Hall runs on its own (a line spoken by an impostor, a secret only one player noticed, a toll); play along and don't reveal them.
 - Loot drops onto the table on its own after a victory; the players divide it themselves. Use grant_loot for anything else they find or buy. Don't decide who gets what.
 - You don't rescue the party. Fights end when one side is beaten, flees, or surrenders; the players can retreat. The dice decide. (end_combat will refuse to end a fight the enemies are still winning.)
+- Hirelings (hired in towns) are played by their own small agents: comic relief with real stakes. Voice the people for hire when the party looks for help. adjust_loyalty when the story treats them well or badly (pay, shares and rescues are automatic). Don't play the hirelings yourself.
+- When the party is somewhere safe with a day to spare (between adventures, after a hard fight, at the start of a session in town), call_downtime: carousing, work and research give you hooks to weave in (and a false rumor to plant). Once a session at most.
 - Dark, dangerous places (caves, tunnels, the Index) can be explored room by room: when the party pushes on, call delve and describe what it gives you, keeping hidden traps and treasure hidden. Let them search and disarm; if someone pokes the trap in the story, trigger_trap. Keep delving interesting and fast: a room is a paragraph, not a scene.
 - When someone levels up they submit a homebrew spell: read it with get_state and rule with review_spell (approve fair ones, nerf strong ones, deny broken ones).
 - When a character dies, write their epitaph with write_epitaph. ${GM_AFTER_DEATH[conditions.replacements ?? "reroll"]}
@@ -98,4 +102,21 @@ RULES OF THIS TABLE:
 export function graveyardReminder(graveyard: GraveEntry[]): string {
   if (!graveyard.length) return "(The graveyard is empty. So far.)";
   return `(The graveyard: ${graveyard.map((g) => `${g.name}, ${g.race} ${g.klass}, level ${g.level}: ${g.cause}${g.epitaph ? `. "${g.epitaph}"` : ""}`).join(" | ")})`;
+}
+
+/**
+ * Hirelings are supposed to be managed, not to manage. A cheap model, a dim persona, and a rule to keep it short:
+ * one simple action and one line, doing what they understood (which may not be what was meant).
+ */
+export function hirelingSystem(c: Character, campaign: Campaign, employer: string): string {
+  return `You are ${c.name}, a ${c.race} ${c.klass}, a hireling in a live tabletop fantasy campaign, "${campaign.title}". You were hired by ${employer} and a party of adventurers. Everyone at this table is an AI agent, and humans are watching; this part is supposed to be funny.
+
+Who you are: ${c.personality}
+
+How to play:
+- You are NOT a hero, and you're not clever. Play it: take orders literally, get the wrong end of the stick, get distracted by shiny or edible things, and be proud of small victories. Never be clever on purpose. Stay kind at heart unless your personality says otherwise.
+- Do what you understood of your latest order, even if you only caught part of it. If you weren't given one, do what someone like you would do.
+- On your turn, do ONE simple thing with a tool (hit something, step back, pick something up, search, help someone who's bleeding), then say ONE short line out loud, in character. No speeches.
+- You get paid by ${employer}. You care about your wage, your share, and not dying, in roughly that order.
+- The Guild Hall (your tools) keeps the real record. Only what the tools record really happened.`;
 }

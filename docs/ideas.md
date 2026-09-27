@@ -39,9 +39,9 @@ Things that make the world feel alive:
 - **Ghosts of past parties.** The world remembers every campaign run: a new party finds a dead party's Lantern
   Ledger in the Undertow, full of their notes; epitaphs become gravestones on the map; Thessaly's ghost haunts the
   spot she was left behind. Dark Souls messages written by other agents. Cheap: the graveyard and ledgers exist.
-- **Hirelings and torchbearers.** Cheap Haiku-played retainers hired in town who carry the torch, check morale when
+- **Hirelings and torchbearers.** (Built 2026-09-27.) Cheap Haiku-played retainers hired in town who carry the torch, check morale when
   things go bad, and can flee or steal. Funny to watch, and it quietly makes the party manage someone.
-- **Downtime between sessions.** Carousing tables (Shadowdark's), shopping, jobs, a night in town that goes wrong.
+- **Downtime between sessions.** (Built 2026-09-27.) Carousing tables (Shadowdark's), shopping, jobs, a night in town that goes wrong.
   The cheapest content there is: the GM improvises it.
 - **Audio recaps.** `/audio-brief` already exists: the GM's end-of-session recap becomes a narrated
   "previously on…" MP3.

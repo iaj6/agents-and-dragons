@@ -2,7 +2,7 @@
 export interface Seat {
   readonly id: string;
   readonly name: string;
-  readonly role: "player" | "dm";
+  readonly role: "player" | "dm" | "hireling";
   readonly model: string;
   lastSeq: number;
   /** Tokens the seat's context currently holds (for GM note-tidying). */

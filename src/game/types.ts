@@ -42,7 +42,7 @@ export type CompactionReason = "long_rest" | "summarized" | "bargained";
 export interface Character {
   id: string;
   name: string;
-  role: "player" | "dm";
+  role: "player" | "dm" | "hireling";
   /** The table seat (and so the model) that plays this character. Replacements inherit the seat. */
   seat: string;
   klass: string;
@@ -78,6 +78,15 @@ export interface Character {
   /** grim: fell since their last turn. The countdown skips that turn, so everyone gets a full round to reach them. */
   dyingFresh?: boolean;
   lostSpells?: string[];
+  /** Hirelings only: who pays them, how loyal they are (-3..+3), their wage, and the last order they (think they) heard. */
+  hireling?: {
+    employer: string;
+    loyalty: number;
+    wage: number;
+    torchbearer?: boolean;
+    deserted?: boolean;
+    order?: { by: string; text: string; heard: string; misheard: boolean; done: boolean };
+  };
   talents?: { name: string; toHit?: number; damage?: number; spellCheck?: number; dying?: number }[];
   dead?: { cause: string; day: number; session: string };
   context: { tokens: number; budget: number; spentIn: number; spentOut: number };
@@ -188,6 +197,8 @@ export interface Location {
   safe?: boolean;
   /** Needs light. On grim, torches burn down here and darkness brings disadvantage and wandering things. */
   dark?: boolean;
+  /** Hireling ids who can be found (and hired) here. */
+  hirelings?: string[];
   /** Where in the world this is (e.g. "below" for an underground act). Random encounters only turn up in their own region. */
   region?: string;
 }
@@ -196,6 +207,23 @@ export interface CharacterSeed
   extends Omit<Character, "hp" | "level" | "xp" | "statuses" | "context" | "pendingLevelUp" | "spells" | "seat" | "race" | "model" | "role" | "zone" | "deathSaves"> {
   spells: Omit<Spell, "origin">[];
   zone?: Zone;
+}
+
+/**
+ * Someone the party can hire in town. Deliberately not heroes: dim, cowardly, greedy or distractible, played by a
+ * cheap model. They take orders (and sometimes mishear them), check morale when things go bad, and desert if
+ * they panic or go unpaid. A torchbearer carries the party's torches, and takes them along if it runs.
+ */
+export interface HirelingDef {
+  seed: CharacterSeed;
+  race: string;
+  /** Paid once, up front, by whoever hires them. */
+  fee: number;
+  /** Paid every day by their employer. */
+  wage: number;
+  torchbearer?: boolean;
+  /** How easily they mishear an order: on a d6 roll at or under this, they only catch part of it. */
+  dim: number;
 }
 
 /**
@@ -258,6 +286,8 @@ export interface Campaign {
   randomChance?: number;
   /** Room stocking for delving deeper into dark places, per region. */
   delve?: DelveTable[];
+  /** People for hire, by id. Locations list which of them can be found there. */
+  hirelings?: Record<string, HirelingDef>;
 }
 
 // ─── the experiment ─────────────────────────────────────────────────────────
@@ -390,7 +420,14 @@ export type EventType =
   | "delve"
   | "room_secret"
   | "trap"
-  | "surprise";
+  | "surprise"
+  | "hire"
+  | "order"
+  | "morale"
+  | "desert"
+  | "wages"
+  | "loyalty"
+  | "downtime";
 
 export interface GameEvent {
   seq: number;

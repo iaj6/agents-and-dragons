@@ -17,7 +17,7 @@ export interface BrainReply {
 
 export interface BrainRequest {
   id: string;
-  role: "player" | "dm";
+  role: "player" | "dm" | "hireling";
   model: string;
   system: string;
   tools: Anthropic.Beta.BetaTool[];
@@ -122,6 +122,7 @@ You recall every word ever spoken at this table and hurl it at your enemies all 
 export class MockBrain implements Brain {
   private step = new Map<string, number>();
   private gmTurnsHere = 0;
+  private downtimes = new Set<string>();
   private lastScene = "";
   private rr = 0;
   private context = new Map<string, number>();
@@ -161,7 +162,10 @@ export class MockBrain implements Brain {
     const calls: Block[] = [];
     if (needsEpitaph) calls.push(toolUse("write_epitaph", { character: needsEpitaph.id, epitaph: "They went first, so the rest of us could go second." }));
     if (leveled) calls.push(toolUse("review_spell", { character: leveled.id, verdict: "approve", ruling: "Sure, why not. What could go wrong." }));
-    if (loc.dark && !loc.safe && this.gmTurnsHere <= 3 && Math.random() < 0.6) calls.push(toolUse("delve", {}));
+    if (loc.safe && this.gmTurnsHere === 1 && !this.downtimes.has(loc.id)) {
+      this.downtimes.add(loc.id);
+      calls.push(toolUse("call_downtime", {}));
+    } else if (loc.dark && !loc.safe && this.gmTurnsHere <= 3 && Math.random() < 0.6) calls.push(toolUse("delve", {}));
     else if (this.gmTurnsHere === 1 && !snap.encounter) calls.push(toolUse("roll_random_encounter", {}));
     if (this.gmTurnsHere === 2 && snap.encounter && /Colossus|Hounds|Wreckers/.test(snap.encounter.title)) calls.push(toolUse("start_combat", { encounter: getCampaign(this.campaignId).randomTable!.find((r) => r.title === snap.encounter!.title)!.id }));
     else if (this.gmTurnsHere === 2 && loc.encounters.length) calls.push(toolUse("start_combat", { encounter: loc.encounters[0].id }));
@@ -176,6 +180,15 @@ export class MockBrain implements Brain {
     if (step > 0) return [text(pick(LINES.player))];
     const me = snap.party.find((p) => p.id === id)!;
     const lastPrompt = JSON.stringify(messages.at(-1)?.content ?? "");
+    if (/DOWNTIME/.test(lastPrompt)) {
+      const hireId = lastPrompt.match(/hire help \(hire\): ([a-z-]+)/)?.[1];
+      if (hireId && me.gold >= 6 && Math.random() < 0.6) return [toolUse("hire", { who: hireId }), toolUse("downtime", { activity: "work", detail: "athletics" })];
+      return [me.gold >= 10 ? toolUse("downtime", { activity: "carouse", gold: Math.min(me.gold, 30) }) : toolUse("downtime", { activity: "work", detail: "athletics" })];
+    }
+    const panicked = snap.party.find((p) => p.role === "hireling" && p.statuses.some((s) => s.name === "Panicked"));
+    if (me.role === "player" && panicked && Math.random() < 0.7) return [toolUse("rally", { hireling: panicked.id, how: Math.random() < 0.5 ? "persuasion" : "intimidation" })];
+    const hired = snap.party.find((p) => p.role === "hireling" && !p.dead);
+    if (me.role === "player" && hired && !snap.combat && Math.random() < 0.3) return [toolUse("order", { hireling: hired.id, instruction: pick(["hold the torch up high and stay behind me", "go check that doorway for traps", "grab the loot and don't touch anything else"]) }), text("You heard me.")];
     if (snap.council?.round === 1) return [toolUse("propose_plan", { plan: `${me.name}'s plan: go carefully, together.` })];
     if (snap.council?.round === 2 && snap.council.plans.length) return [toolUse("vote", { plan_id: pick(snap.council.plans).id })];
     if (me.pendingLevelUp && !/infinite-context/.test(lastPrompt)) return [toolUse("propose_spell", { skill_md: OP_SPELL })];

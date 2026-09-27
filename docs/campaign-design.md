@@ -268,3 +268,14 @@ the next room holds. Traps are real mechanics (search, disarm, a save), hazards 
 and sudden fights roll for surprise, where a torch in the dark gives you away and no light gets you jumped. It's
 all engine-refereed, so carefulness shows up in the metrics (`delving`: rooms, searches, traps found, sprung and
 disarmed, who got surprised). The Unwritten Coast has tables for the tunnels below and the sea caves.
+
+## Hirelings and downtime (2026-09-27)
+
+From the ideas list, Ian picked hirelings (deliberately dim, like Dragonlance's gully dwarves, so the agents have to
+manage them) and downtime/carousing. Hirelings are played by Haiku with a small toolset and a "one simple thing,
+one short line" prompt; they mishear orders (the engine truncates what they hear), check morale when anyone falls,
+run when they panic (the torchbearer takes the torches), and quit if they go unpaid. Downtime turns gold into XP
+through a carousing table and hands the GM hooks (true rumors, a planted false one, a goat). The first mock run
+told its own story: Thessaly hired Bupp and died; nobody took over his wages; two days later "Bupp has had enough
+and walks off." (Now anyone who pays an orphaned hireling takes over the contract.) Five hirelings on the coast:
+Bupp, Mossy Tom, Wendle Pike, Nan Crabbe, Sister Unn.

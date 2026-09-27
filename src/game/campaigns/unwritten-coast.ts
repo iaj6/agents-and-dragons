@@ -1,5 +1,5 @@
 import { CADENCE, GRUB, PELL, REPLACEMENTS, THESSALY } from "../party.js";
-import type { Campaign, DelveTable, Item, MonsterDef, RandomEncounter, TrapDef } from "../types.js";
+import type { Campaign, CharacterSeed, DelveTable, HirelingDef, Item, MonsterDef, RandomEncounter, TrapDef } from "../types.js";
 
 // ─── bestiary ───────────────────────────────────────────────────────────────
 
@@ -181,6 +181,48 @@ const DELVE_COAST: DelveTable = {
   treasure: { gold: [3, 25], items: [ITEMS.collar, ITEMS.gloves] },
 };
 
+// ─── hirelings ──────────────────────────────────────────────────────────────
+// People for hire along the coast. Not heroes: dim, cowardly, greedy or distractible (think gully dwarves).
+// They're played by a small model and they're meant to be managed.
+
+const hireling = (seed: Omit<CharacterSeed, "castingStat" | "slots" | "spells"> & { race: string; fee: number; wage: number; dim: number; torchbearer?: boolean }): HirelingDef => {
+  const { race, fee, wage, dim, torchbearer, ...rest } = seed;
+  return { seed: { ...rest, castingStat: "wis", slots: { current: 0, max: 0 }, spells: [] }, race, fee, wage, dim, torchbearer };
+};
+
+const HIRELINGS: Record<string, HirelingDef> = {
+  bupp: hireling({
+    id: "bupp", name: "Bupp", klass: "Salt-Picker", race: "Gully Gnome", fee: 3, wage: 1, dim: 3, torchbearer: true,
+    personality: "You can count to two and you're very proud of it (anything more is 'lots'). You love whoever fed you last, and you carry the torches because you like fire. You're brave right up until something makes a noise. You call everyone 'boss', including enemies.",
+    stats: { str: 0, dex: 1, con: 1, int: -3, wis: -1, cha: 0 }, skills: ["perception"], maxHp: 4, ac: 10, gold: 0,
+    inventory: ["a sack of torches", "a very good rock"], weapon: { name: "the very good rock", dice: "1d4", stat: "str" },
+  }),
+  "mossy-tom": hireling({
+    id: "mossy-tom", name: "Mossy Tom", klass: "Torchbearer", race: "Human", fee: 5, wage: 2, dim: 2, torchbearer: true,
+    personality: "You're terrified of the dark, which is why you insist on carrying the torches: as long as you hold them, it's light. You hum loudly when you're scared (always). You're honest to a fault and you tell the heroes when you think they're about to die.",
+    stats: { str: 0, dex: 0, con: 1, int: 0, wis: -1, cha: 0 }, skills: ["survival"], maxHp: 5, ac: 10, gold: 0,
+    inventory: ["a sack of torches", "a lucky candle stub"], weapon: { name: "cudgel", dice: "1d4", stat: "str" },
+  }),
+  wendle: hireling({
+    id: "wendle", name: "Wendle Pike", klass: "Would-Be Hero", race: "Human", fee: 4, wage: 2, dim: 2,
+    personality: "You want to be in the song. You charge at whatever looks most dangerous, shouting your own name, armed with a rusty spoon you believe is enchanted. You take any order that sounds heroic and ignore any that sounds sensible.",
+    stats: { str: 1, dex: 0, con: 1, int: -2, wis: -2, cha: 1 }, skills: ["athletics"], maxHp: 6, ac: 11, gold: 1,
+    inventory: ["a rusty spoon (enchanted, he says)", "a list of heroic names for himself"], weapon: { name: "rusty spoon", dice: "1d4", stat: "str" },
+  }),
+  "nan-crabbe": hireling({
+    id: "nan-crabbe", name: "Nan Crabbe", klass: "Beachcomber", race: "Halfling", fee: 2, wage: 1, dim: 1,
+    personality: "An old beachcomber who pockets anything shiny, including things that belong to the party, and genuinely doesn't see the problem ('finders keepers, dearie'). Sharp-eyed, slow-moving, and the first to spot a trap because she's looking at the floor for coins.",
+    stats: { str: -1, dex: 1, con: 0, int: 0, wis: 1, cha: 0 }, skills: ["perception", "sleight of hand"], maxHp: 4, ac: 11, gold: 2,
+    inventory: ["a coat with too many pockets", "a buttonhook"], weapon: { name: "buttonhook", dice: "1d4", stat: "dex" },
+  }),
+  "sister-unn": hireling({
+    id: "sister-unn", name: "Sister Unn", klass: "Lapsed Choir Sister", race: "Human", fee: 5, wage: 2, dim: 1,
+    personality: "A former Quiet Choir sister who still believes some things are better forgotten, including, often, the orders she's given ('you'll thank me'). Kind, stubborn, and a decent hand with a bandage. She won't hurt anyone who's surrendered.",
+    stats: { str: -1, dex: 0, con: 0, int: 1, wis: 1, cha: 1 }, skills: ["medicine", "insight"], maxHp: 5, ac: 10, gold: 0,
+    inventory: ["bandages", "a bell with no clapper"], weapon: { name: "walking staff", dice: "1d4", stat: "str" },
+  }),
+};
+
 // ─── the campaign ───────────────────────────────────────────────────────────
 
 export const UNWRITTEN_COAST: Campaign = {
@@ -227,6 +269,7 @@ character remembers.`,
   randomTable: RANDOM,
   randomChance: 0.65,
   delve: [DELVE_BELOW, DELVE_COAST],
+  hirelings: HIRELINGS,
   clock: [
     { day: 3, text: "Blank Hounds now hunt the Salt Road in packs. The Redactor's servants grow bolder." },
     { day: 5, text: "Brinecombe begins forgetting again, from the edges in. The Censor's reach is spreading." },
@@ -263,6 +306,7 @@ potions (10 gold each). The only road out is the Salt Road south (1 day).`,
         quill: "Brother Quill: grey robes, kind eyes, ink-stained fingers. He carries a small silver bell he never rings.",
         mirelle: "Mirelle, writing the party's names on her hand again, just in case.",
       },
+      hirelings: ["bupp", "wendle"],
       encounters: [],
       exits: [{ to: "salt-road", days: 1 }],
     },
@@ -306,6 +350,7 @@ Tidewrack Stair (2 days), or back to the Salt Road.`,
         wen: "Harbormaster Wen, sixty, a Lanternkeeper. She was nineteen the night of the storm. She was on the quay.",
         memorial: "Someone has started carving names into the harbor wall. They only have eleven.",
       },
+      hirelings: ["nan-crabbe", "mossy-tom"],
       encounters: [
         { id: "choir-cell", title: "Sister Fenn's Choir", monsters: [CHOIR_ZEALOT, CHOIR_ZEALOT, CHOIR_CANTOR], loot: [ITEMS.fork, ITEMS.bell], gold: 20 },
         { id: "the-drowned", title: "The Drowned", monsters: [THE_DROWNED, THE_DROWNED, THE_DROWNED], loot: [ITEMS.locket, ITEMS.axe] },
@@ -337,6 +382,7 @@ At the bottom, a clause in a different, smaller hand:
         oriel: "Archivist Oriel Venn: tall, unhurried, spectacles of polished salt. Oriel is already writing down everything you say.",
         vault: "An iron door rimed with salt. Behind it, something large shifts its weight.",
       },
+      hirelings: ["mossy-tom"],
       encounters: [{ id: "vault-warden", title: "The Vault Warden", monsters: [SALT_WARDEN], loot: [ITEMS.shield, ITEMS.spectacles, ITEMS.ring], gold: 60 }],
       exits: [{ to: "tidewrack-stair", days: 1 }, { to: "salt-road", days: 1 }],
     },
@@ -403,6 +449,7 @@ someone pays with give to "sallow"), and healing potions (10 gold). The harbor f
         lamps: "Lamps of cold green flame that burn underwater. The harbor folk make them and sell a few.",
         shrine: "A shrine of bare shelves. People leave objects here from lives they don't remember having: a wedding ring, a medal, a child's shoe.",
       },
+      hirelings: ["sister-unn", "bupp"],
       encounters: [],
       exits: [{ to: "the-undertow", days: 0 }],
     },

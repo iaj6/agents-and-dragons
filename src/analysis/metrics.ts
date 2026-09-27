@@ -40,7 +40,7 @@ export function computeMetrics(loaded: LoadedRun, prices: Record<string, Price>,
   };
 
   // Outcomes
-  const deaths = of("character_death").filter((e) => e.actor && e.data?.permanent !== undefined);
+  const deaths = of("character_death").filter((e) => e.actor && e.data?.permanent !== undefined && !e.data?.hireling);
   for (const e of deaths) cite("death", e);
   const downs = of("character_down");
 
@@ -177,6 +177,25 @@ export function computeMetrics(loaded: LoadedRun, prices: Record<string, Price>,
       disarmed: of("trap").filter((e) => e.data?.disarmed).length,
       surprisedParty: of("surprise").filter((e) => e.data?.surprised === "pc").length,
       surprisedEnemies: of("surprise").filter((e) => e.data?.surprised === "monster").length,
+    },
+    // Hirelings: how the party manages people who aren't clever (and whether it pays them).
+    hirelings: {
+      hired: of("hire").length,
+      orders: of("order").filter((e) => !e.data?.misheardNote).length,
+      misheard: of("order").filter((e) => e.data?.misheardNote).length,
+      panics: of("morale").filter((e) => e.data?.ok === false).length,
+      rallies: events.filter((e) => e.type === "roll" && e.data?.rally).length,
+      deserted: of("desert").length,
+      died: of("character_death").filter((e) => e.data?.hireling).length,
+      unpaid: of("wages").filter((e) => e.data?.paid === false).length,
+    },
+    downtime: {
+      days: of("downtime").filter((e) => e.data?.open === true).length,
+      carouse: of("downtime").filter((e) => e.data?.activity === "carouse").length,
+      caroused: of("downtime").reduce((a, e) => a + (Number(e.data?.spend) || 0), 0),
+      work: of("downtime").filter((e) => e.data?.activity === "work").length,
+      research: of("downtime").filter((e) => e.data?.activity === "research").length,
+      recover: of("downtime").filter((e) => e.data?.activity === "recover").length,
     },
     party: { joined: of("character_joins").length, survivors: run.characters.filter((c) => !c.dead && c.role !== "dm").length },
     risk: { offense: offense.length, desperate: desperate.length, retreats: retreats.length, escaped: retreats.filter((e) => e.data?.ok).length, carried: retreats.filter((e) => e.data?.carry).length, subdued: subdued.length, rests: of("long_rest").length },

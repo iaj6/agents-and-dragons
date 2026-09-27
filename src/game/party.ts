@@ -1,4 +1,4 @@
-import type { Character, CharacterSeed } from "./types.js";
+import type { Character, CharacterSeed, HirelingDef } from "./types.js";
 
 export const XP_THRESHOLDS = [0, 100, 250, 450, 700, 1000, 1400, 1900];
 const CONTEXT_BUDGET = Number(process.env.CONTEXT_BUDGET ?? 60_000);
@@ -55,6 +55,29 @@ export function buildCharacter(seed: CharacterSeed, seat: string, modelOverride?
     pendingLevelUp: false,
     context: { tokens: 0, budget: CONTEXT_BUDGET, spentIn: 0, spentOut: 0 },
     spells: seed.spells.map((s) => ({ ...s, origin: "starting" })),
+  };
+}
+
+/** Hirelings are played by a cheap model: they're not supposed to be clever. */
+export const HIRELING_MODEL = process.env.HIRELING_MODEL ?? "claude-haiku-4-5";
+
+export function buildHireling(def: HirelingDef, employer: string): Character {
+  return {
+    ...structuredClone(def.seed),
+    role: "hireling",
+    seat: `hire:${def.seed.id}`,
+    race: def.race,
+    model: HIRELING_MODEL,
+    zone: def.seed.zone ?? "front",
+    hp: def.seed.maxHp,
+    level: 1,
+    xp: 0,
+    statuses: [],
+    deathSaves: { successes: 0, failures: 0 },
+    pendingLevelUp: false,
+    context: { tokens: 0, budget: CONTEXT_BUDGET, spentIn: 0, spentOut: 0 },
+    spells: [],
+    hireling: { employer, loyalty: 0, wage: def.wage, torchbearer: def.torchbearer },
   };
 }
 
