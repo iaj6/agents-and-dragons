@@ -247,7 +247,14 @@ async function hirelingTurn(s: Seat, inFight: boolean) {
     return;
   }
   const order = h.order ? `${(await character(h.order.by)).name} told you: "${h.order.heard}"` : "Nobody has told you what to do.";
-  await playerTurn(s, `${inFight ? "It's your turn in the fight." : "The party is looking at you."} ${order} Do one simple thing, then say one short line.`);
+  // Spell out who's who: a hireling with only the transcript to go on asked the table what it was supposed to hit.
+  let scene = "";
+  if (inFight) {
+    const snap = await hall.get<Snapshot>("/api/state");
+    const me = await character(s.id);
+    scene = ` You're in the ${me.zone} line with ${me.hp}/${me.maxHp} HP. Enemies: ${snap.monsters.map((m) => `${m.id} ${m.name} (${m.zone} line, ${m.hp}/${m.maxHp} HP)`).join("; ") || "none left"}.`;
+  }
+  await playerTurn(s, `${inFight ? "It's your turn in the fight." : "The party is looking at you."}${scene} ${order} Do one simple thing, then say one short line.`);
   if (h.order) await hall.post("/api/hireling/order-done", { id: s.id });
 }
 

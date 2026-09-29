@@ -913,6 +913,8 @@ export class Game {
     const enc = this.encounterDef(this.combat.encounter)!;
     const rounds = this.combat.round;
     this.combat = null;
+    // A hireling who panicked but never got the chance to run calms down once the fight is over.
+    for (const h of this.hirelings()) if (this.hasStatus(h, "Panicked")) this.removeStatus(h, "Panicked");
     if (outcome === "party_down") this.resolvePartyDown();
     if (outcome === "retreated") this.resolveLeftBehind();
     if (outcome === "victory" || outcome === "ended_by_gm") {

@@ -359,3 +359,15 @@ test("potions: you can use a fallen friend's own potion on them", () => {
   assert.ok(!g.hasStatus(wiz, "Dying") && wiz.hp > 0);
   assert.throws(() => g.usePotion("pell", "grub"), GameError, "no potion anywhere");
 });
+
+test("hirelings: panic that never got a turn fades when the fight ends", () => {
+  const g = newGame({ difficulty: "grim" });
+  g.char("pell").gold = 20;
+  g.hire("pell", "bupp");
+  g.run.location = "salt-road";
+  g.travel("salt-stacks");
+  if (!g.combat) g.startCombat("vault-warden");
+  g.char("bupp").statuses.push({ name: "Panicked", note: "test" });
+  g.endCombat("ended_by_gm");
+  assert.ok(!g.hasStatus(g.char("bupp"), "Panicked"));
+});

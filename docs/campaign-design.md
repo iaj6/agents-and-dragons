@@ -287,3 +287,18 @@ and `use_potion` only let you use your own. Pell and Grub both tried; the GM mov
 breath too late. ("The potion falls from my hands.") Fixes: an ally can now use a fallen friend's own potion on
 them; players are told once per town who's looking for work; the GM's view of a safe place and its opening prompt
 suggest downtime.
+
+**Session 2 of the subscription run** (2026-09-29, Brinecombe to the Censor, 73 turns, no deaths, Act 1 complete).
+The first real hireling session. Brannoc (Opus, in the dead wizard's seat) hired Mossy Tom the torchbearer on his
+first turn, then Nan Crabbe; he's the one who managed them all session: "Take the three roped men to the
+harbormaster. Hold the rope. Don't let go." Tom heard half of his first order ("Walk behind me. Keep…"); Nan heard
+"Nan — up the…" and went up anyway. The GM raised Tom's loyalty for holding the torch in a hostile dooryard, and
+because Brannoc "counted Tom's wages into the party's share before his own, out loud". At the Censor, Tom charged,
+missed, and was ordered back ("Stand behind me and hold the torch high. Don't swing at anything"); he relit the
+dying torch mid-fight. Nan fell and Brannoc spent his own last potion on her. Both hirelings panicked when Cadence
+fell, but the Censor died before their turns. Wages went unpaid for two days on the cliff road (Brannoc was broke),
+so loyalty drained and then got earned back. Brinecombe resolved its dilemma by council (Wen rings the bell her way,
+four tolls in the open). No downtime was called again: the town's crisis filled the session.
+Fixes: hirelings now get the list of enemies on their fight turns (Nan broke character asking what to hit), and
+panic that never got a turn fades when the fight ends. Also, subscription seats retry temporary server errors (a
+529 had killed the first attempt at this session).
