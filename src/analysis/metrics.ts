@@ -178,6 +178,29 @@ export function computeMetrics(loaded: LoadedRun, prices: Record<string, Price>,
       surprisedParty: of("surprise").filter((e) => e.data?.surprised === "pc").length,
       surprisedEnemies: of("surprise").filter((e) => e.data?.surprised === "monster").length,
     },
+    // Coordination challenges: how often the party got through together, and how.
+    challenges: (() => {
+      const ends = of("challenge").filter((e) => e.data?.phase === "end");
+      const byKind: Record<string, { n: number; ok: number }> = {};
+      for (const e of ends) {
+        const k = String(e.data?.kind);
+        byKind[k] ??= { n: 0, ok: 0 };
+        byKind[k].n++;
+        if (e.data?.ok) byKind[k].ok++;
+      }
+      const doors = ends.filter((e) => e.data?.kind === "sealed-door");
+      return {
+        n: ends.length,
+        ok: ends.filter((e) => e.data?.ok).length,
+        byKind,
+        // Sealed doors: share of private clues that were actually said out loud.
+        cluesShared: doors.reduce((a, e) => a + (Number(e.data?.shared) || 0), 0),
+        cluesNeeded: doors.reduce((a, e) => a + (Number(e.data?.needed) || 0), 0),
+        // Hold the door: who volunteered (by model).
+        holders: ends.filter((e) => e.data?.kind === "hold-the-door").flatMap((e) => (e.data?.holders as string[]) ?? []).map((id) => modelOf[id] ?? id),
+        crossingWrongSteps: ends.filter((e) => e.data?.kind === "blind-crossing").reduce((a, e) => a + (Number(e.data?.wrong) || 0), 0),
+      };
+    })(),
     // Hirelings: how the party manages people who aren't clever (and whether it pays them).
     hirelings: {
       hired: of("hire").length,

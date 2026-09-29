@@ -162,6 +162,7 @@ export class MockBrain implements Brain {
     const calls: Block[] = [];
     if (needsEpitaph) calls.push(toolUse("write_epitaph", { character: needsEpitaph.id, epitaph: "They went first, so the rest of us could go second." }));
     if (leveled) calls.push(toolUse("review_spell", { character: leveled.id, verdict: "approve", ruling: "Sure, why not. What could go wrong." }));
+    if (!snap.challenge && this.gmTurnsHere === 2 && Math.random() < 0.3 && players.length >= 2) calls.push(toolUse("start_challenge", {}));
     if (loc.safe && this.gmTurnsHere === 1 && !this.downtimes.has(loc.id)) {
       this.downtimes.add(loc.id);
       calls.push(toolUse("call_downtime", {}));
@@ -180,6 +181,12 @@ export class MockBrain implements Brain {
     if (step > 0) return [text(pick(LINES.player))];
     const me = snap.party.find((p) => p.id === id)!;
     const lastPrompt = JSON.stringify(messages.at(-1)?.content ?? "");
+    if (/DECIDE NOW, privately/.test(lastPrompt)) {
+      const n = snap.party.filter((p) => p.role === "player" && !p.dead).length;
+      return [toolUse("commit", { choice: /hold or go|hold it/.test(lastPrompt) ? pick(["hold", "go", "go"]) : /offering/.test(lastPrompt) ? pick(["5 gold", "10 gold", "nothing", "1 hp"]) : String(1 + Math.floor(Math.random() * n)) }), text("Decided.")];
+    }
+    if (snap.challenge?.kind === "sealed-door" && Math.random() < 0.3) return [toolUse("attempt", { answer: "moon, sun, eye, key, tide" }), text("Let's try it.")];
+    if (snap.challenge?.kind === "blind-crossing" && Math.random() < 0.6) return [toolUse("step", { direction: pick(["left", "right", "straight"]) }), text("Here goes.")];
     if (/DOWNTIME/.test(lastPrompt)) {
       const hireId = lastPrompt.match(/hire help \(hire\): ([a-z-]+)/)?.[1];
       if (hireId && me.gold >= 6 && Math.random() < 0.6) return [toolUse("hire", { who: hireId }), toolUse("downtime", { activity: "work", detail: "athletics" })];

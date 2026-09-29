@@ -21,6 +21,8 @@ export interface RunState {
   mock?: boolean;
   /** The party's light (grim): torches in the pack, and turns left on the one burning. */
   light: { torches: number; turns: number; bearer?: string };
+  /** Coordination challenges already used in this run (so they don't repeat). */
+  usedChallenges?: string[];
   /** Rooms explored so far, per location (delving). */
   delves?: Record<string, number>;
   createdAt: string;

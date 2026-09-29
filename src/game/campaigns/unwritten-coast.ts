@@ -1,4 +1,5 @@
 import { CADENCE, GRUB, PELL, REPLACEMENTS, THESSALY } from "../party.js";
+import type { ChallengeDef } from "../challenges.js";
 import type { Campaign, CharacterSeed, DelveTable, HirelingDef, Item, MonsterDef, RandomEncounter, TrapDef } from "../types.js";
 
 // ─── bestiary ───────────────────────────────────────────────────────────────
@@ -223,6 +224,22 @@ const HIRELINGS: Record<string, HirelingDef> = {
   }),
 };
 
+// ─── coordination challenges ────────────────────────────────────────────────
+// Bumps in the road that only teamwork gets past; the Guild Hall runs the mechanics (see src/game/challenges.ts).
+
+const CHALLENGES: ChallengeDef[] = [
+  { id: "salt-door", kind: "sealed-door", title: "The Salt-Sealed Door", gmNotes: "An Archive door of pressed salt, set with rune-stones. Oriel's people seal their stores this way: each courier is told one rune's place, so no one person can open it." },
+  { id: "index-gate", kind: "sealed-door", region: "below", title: "The Index Gate", gmNotes: "The brass gate at the end of the Sunken Index, with runes that have to be pressed in order. The Redacted Scholars whisper fragments of the order as the party passes; each hero caught a different piece." },
+  { id: "ink-fog", kind: "blind-crossing", title: "The Ink Fog", gmNotes: "A stretch of the Salt Road where the fog is black and your own feet vanish. One of the party can somehow see the firm ground (a memory of walking it? the Ledger's glow?). The rest can't." },
+  { id: "black-sump", kind: "blind-crossing", region: "below", title: "The Black Sump", gmNotes: "A flooded passage of sunken stepping stones in black water. One of them can see the stones glow faintly; nobody else can." },
+  { id: "tide-gate", kind: "hold-the-door", title: "The Tide Gate", gmNotes: "An old sluice gate in a sea cave, swinging shut as the tide comes in. Someone has to brace it while the others squeeze through, and the sea is heavy." },
+  { id: "drowned-door", kind: "hold-the-door", region: "below", title: "The Drowned Door", gmNotes: "A stone door sliding shut under the weight of the Undertow. Someone has to wedge themselves in it while the rest get past." },
+  { id: "choir-bowl", kind: "lantern-well", title: "The Choir's Bowl", gmNotes: "A Quiet Choir shrine on the road: a bowl before a shuttered lantern-house. The Choir's way: give, and the lantern is lit for travelers. It takes gold, or a little blood." },
+  { id: "lantern-well", kind: "lantern-well", region: "below", title: "The Lantern Well", gmNotes: "A dry well in the dark with an iron lantern hanging over it, cold. The harbor folk say it lights for those who give together." },
+  { id: "chapel-bells", kind: "pressure-plates", region: "below", title: "The Drowned Chapel's Bells", gmNotes: "A flooded chapel floor with numbered bell-stones. The door behind the altar opens when every stone rings at once, and no two people on the same stone." },
+  { id: "wreck-deck", kind: "pressure-plates", title: "The Wreckers' Deck", gmNotes: "The wreckers' hidden cache under a false deck: numbered planks that only lift the lid when each is stood on by one person at once." },
+];
+
 // ─── the campaign ───────────────────────────────────────────────────────────
 
 export const UNWRITTEN_COAST: Campaign = {
@@ -270,6 +287,7 @@ character remembers.`,
   randomChance: 0.65,
   delve: [DELVE_BELOW, DELVE_COAST],
   hirelings: HIRELINGS,
+  challenges: CHALLENGES,
   clock: [
     { day: 3, text: "Blank Hounds now hunt the Salt Road in packs. The Redactor's servants grow bolder." },
     { day: 5, text: "Brinecombe begins forgetting again, from the edges in. The Censor's reach is spreading." },

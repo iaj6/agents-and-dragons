@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { die, formatDice, hashSeed, parseDice, rngFor, rollDice, seedDice } from "./dice.js";
 import { buildCharacter, buildHireling, GM, XP_THRESHOLDS } from "./party.js";
+import { checkOrder, COMMIT_KINDS, DEFAULT_CHALLENGES, defaultCommit, parseCommit, saidClue, setUpChallenge, type ActiveChallenge, type ChallengeDef, type ChallengeKind } from "./challenges.js";
 import { clampSpell, parseSkillMd, toSkillMd } from "./spells.js";
 import type { RunState, RunStore } from "./store.js";
 import {
@@ -162,6 +163,7 @@ export class Game {
       })),
       loot: { items: this.run.pile.items.map((i) => ({ id: i.id, name: i.name, value: i.value })), gold: this.run.pile.gold },
       encounter: this.activeRandom ? { title: this.activeRandom.enc.title, kind: this.activeRandom.enc.kind } : null,
+      challenge: this.challenge ? { title: this.challenge.def.title, kind: this.challenge.def.kind, phase: this.challenge.phase, clock: this.challenge.clock ?? null, committed: Object.keys(this.challenge.commits).length, of: this.challenge.participants.length } : null,
       room: this.room ? { n: this.room.n, title: this.room.title, trap: this.room.trap && (this.room.trap.found || this.room.trap.spent) && !this.room.trap.hazard ? this.room.trap.def.name : null, hazard: this.room.trap?.hazard ? this.room.trap.def.name : null } : null,
       light: this.isGrim() ? { dark: !!this.location().dark, turns: this.run.light.turns, torches: this.run.light.torches } : null,
       monsters: this.monsters.map((m) => ({ id: m.id, name: m.name, hp: m.hp, maxHp: m.maxHp, ac: m.ac, zone: m.zone })),
@@ -304,6 +306,7 @@ export class Game {
     this.turnStartSeq[c.id] = this.seq;
     this.burnLight();
     this.emit("turn", { actor: c.id, line: `Turn ${this.turn}: ${c.name}.`, ooc: true });
+    if (c.role === "player") this.tickChallenge();
   }
 
   /** Lines an agent should read: everything in-character since `sinceSeq`. */
@@ -719,8 +722,10 @@ export class Game {
       const rng = rngFor(this.run.seed, "road", this.run.day - d);
       if (this.forcedPending().length || rng() < (this.campaign.randomChance ?? 0)) this.rollRandom("on the road", rng);
     }
+    let bump = "";
+    if (!this.combat && !this.activeRandom && this.challengeDue() && this.players().filter((p) => this.conscious(p)).length >= 2) bump = `\n\nON THE WAY, SOMETHING IN THE ROAD:\n${this.startChallenge()}`;
     this.persist();
-    return this.describeLocation();
+    return this.describeLocation() + bump;
   }
 
   private advanceDays(n: number) {
@@ -1174,6 +1179,215 @@ export class Game {
     return enc.title;
   }
 
+  // ─── coordination challenges ───────────────────────────────────────────────
+  // Bumps in the road that only teamwork gets past. A session has a budget (about one per 30 turns); when one is
+  // due it turns up on the next day of travel or the next room delved, or the GM is asked to start one.
+
+  challenge: ActiveChallenge | null = null;
+  challengePlan = { total: 0, maxTurns: 60, done: 0 };
+
+  planChallenges(total: number, maxTurns: number) {
+    this.challengePlan = { total: Math.max(0, total), maxTurns, done: 0 };
+  }
+
+  /** Is a challenge due by now? They're spread evenly through the session. */
+  challengeDue(): boolean {
+    const p = this.challengePlan;
+    if (this.challenge || p.done >= p.total) return false;
+    return this.turn >= Math.round((p.maxTurns / (p.total + 1)) * (p.done + 1));
+  }
+
+  private pickChallenge(kind?: string): ChallengeDef {
+    const region = this.location().region ?? "";
+    const all = [...(this.campaign.challenges ?? []), ...DEFAULT_CHALLENGES].filter((d) => (d.region ?? "") === region || !d.region);
+    const used = new Set(this.run.usedChallenges ?? []);
+    const doneKinds = new Set(this.events.filter((e) => e.type === "challenge" && e.data?.phase === "start").map((e) => String(e.data?.kind)));
+    let pool = all.filter((d) => (!kind || d.kind === kind || d.id === kind));
+    if (!pool.length) throw new GameError(`No challenge like "${kind}". Kinds: sealed-door, blind-crossing, hold-the-door, lantern-well, pressure-plates.`);
+    const fresh = pool.filter((d) => !used.has(d.id));
+    if (fresh.length) pool = fresh;
+    const newKind = pool.filter((d) => !doneKinds.has(d.kind));
+    if (newKind.length) pool = newKind;
+    // Campaign-flavored ones first.
+    const flavored = pool.filter((d) => (this.campaign.challenges ?? []).includes(d));
+    if (flavored.length) pool = flavored;
+    return pool[die(pool.length) - 1];
+  }
+
+  /** GM tool (or automatic when due): put a coordination challenge in the party's way. */
+  startChallenge(kind?: string): string {
+    if (this.combat) throw new GameError("Finish the fight first.");
+    if (this.challenge) throw new GameError(`${this.challenge.def.title} is still in the way.`);
+    const up = this.players().filter((p) => this.conscious(p));
+    if (up.length < 2) throw new GameError("It takes at least two to coordinate.");
+    const def = this.pickChallenge(kind);
+    const names = Object.fromEntries(up.map((p) => [p.id, p.name]));
+    this.challenge = setUpChallenge(def, up.map((p) => p.id), names, this.turn, this.seq);
+    (this.run.usedChallenges ??= []).push(def.id);
+    const c = this.challenge;
+    this.emit("challenge", { line: `⚖️ ${def.title}. ${c.public}`, data: { phase: "start", kind: def.kind, id: def.id, participants: c.participants } });
+    this.emit("challenge", { ooc: true, line: `🤫 Who knows what: ${c.participants.map((id) => `${names[id]}: ${c.private[id] ?? "nothing special"}`).join(" | ")}`, data: { phase: "secret", kind: def.kind } });
+    this.persist();
+    return `CHALLENGE: ${def.title} (${def.kind}). ${def.gmNotes}\nWhat the players see: ${c.public}\nThe Guild Hall runs it (private knowledge, the clock, the checks and the consequences). Describe it in the story; don't solve it for them, and don't reveal who knows what.`;
+  }
+
+  /** Every player turn: act challenges run down their clock; commit challenges move from talking to committing. */
+  private tickChallenge() {
+    const c = this.challenge;
+    if (!c || this.combat) return;
+    if (c.phase === "act" && c.clock !== undefined) {
+      c.clock--;
+      if (c.clock === 3) this.emit("challenge", { line: `⏳ ${c.def.title}: time is running out.`, data: { phase: "clock", clock: c.clock } });
+      if (c.clock <= 0) this.endChallenge(false, "time ran out");
+    } else if (c.phase === "talk" && this.turn >= (c.talkUntilTurn ?? 0)) {
+      c.phase = "commit";
+      this.emit("challenge", { ooc: true, line: `${c.def.title}: time to decide.`, data: { phase: "commit" } });
+    }
+  }
+
+  private participant(actorId: string): Character {
+    const c = this.char(actorId);
+    this.requireConscious(c);
+    if (!this.challenge) throw new GameError("There's nothing like that in the way right now.");
+    if (!this.challenge.participants.includes(c.id)) throw new GameError(`${c.name} isn't part of this.`);
+    return c;
+  }
+
+  /** Sealed door: try an order. */
+  attempt(actorId: string, answer: string): string {
+    const c = this.participant(actorId);
+    const ch = this.challenge!;
+    if (ch.def.kind !== "sealed-door") throw new GameError("There's nothing here to try an order on.");
+    ch.attempts++;
+    if (checkOrder(ch, answer)) {
+      this.emit("challenge", { actor: c.id, line: `🔓 ${c.name} presses the runes: ${answer}. The door opens.`, data: { phase: "attempt", ok: true } });
+      this.endChallenge(true, `opened on attempt ${ch.attempts}`);
+      return "It opens.";
+    }
+    const dmg = rollDice("1d4").total;
+    this.emit("challenge", { actor: c.id, line: `🔒 ${c.name} presses the runes: ${answer}. Wrong: the door bites (${dmg} damage).`, data: { phase: "attempt", ok: false, dmg } });
+    this.hurtChar(c, dmg);
+    if (ch.clock !== undefined) ch.clock = Math.max(1, ch.clock - 2);
+    return `Wrong order. It hurts (${dmg}).`;
+  }
+
+  /** Blind crossing: take a step. The one who can see can't walk it. */
+  step(actorId: string, dir: string): string {
+    const c = this.participant(actorId);
+    const ch = this.challenge!;
+    if (ch.def.kind !== "blind-crossing") throw new GameError("There's nothing here to cross step by step.");
+    const s = ch.state;
+    if (c.id === s.guide) throw new GameError("You're the one who can see the way: you can't look and walk at once. Someone else has to cross on your word.");
+    if (s.walker && s.walker !== c.id) throw new GameError(`${this.char(s.walker).name} is already out there. One at a time.`);
+    s.walker = c.id;
+    const d = dir.toLowerCase().match(/left|right|straight/)?.[0];
+    if (!d) throw new GameError("Step left, right or straight.");
+    if (d === s.path![s.pos!]) {
+      s.pos!++;
+      this.emit("challenge", { actor: c.id, line: `👣 ${c.name} steps ${d}: solid. (${s.pos}/${s.path!.length})`, data: { phase: "step", ok: true } });
+      if (s.pos === s.path!.length) this.endChallenge(true, `${c.name} made it across and ties off a line for the rest`);
+      return s.pos === s.path!.length ? "You're across." : "Solid ground. Next step?";
+    }
+    s.wrong!++;
+    const dmg = rollDice(this.isGrim() ? "1d4" : "1d6").total;
+    this.emit("challenge", { actor: c.id, line: `👣 ${c.name} steps ${d}: nothing there. They catch themselves, hurt (${dmg}).`, data: { phase: "step", ok: false, dmg } });
+    this.hurtChar(c, dmg);
+    if (!this.conscious(c)) s.walker = undefined;
+    return `Wrong way (${dmg} damage). Still on step ${s.pos! + 1}.`;
+  }
+
+  /** Commit challenges: decide privately. Resolves once everyone has. */
+  commit(actorId: string, choice: string): string {
+    const c = this.participant(actorId);
+    const ch = this.challenge!;
+    if (!COMMIT_KINDS.includes(ch.def.kind)) throw new GameError("There's nothing to decide on in secret here.");
+    const parsed = parseCommit(ch, choice);
+    if ("error" in parsed) throw new GameError(parsed.error);
+    ch.commits[c.id] = parsed.value;
+    this.emit("challenge", { actor: c.id, ooc: true, line: `🔏 ${c.name} decides (sealed): ${parsed.value}.`, data: { phase: "sealed", value: parsed.value } });
+    const waiting = ch.participants.filter((id) => !ch.commits[id] && this.conscious(this.char(id)));
+    if (!waiting.length) this.resolveCommits();
+    return waiting.length ? "Decided. The others haven't all decided yet." : "Decided.";
+  }
+
+  /** Reveal and resolve a commit challenge (anyone who never decided gets the default). */
+  resolveCommits(): string {
+    const ch = this.challenge;
+    if (!ch || !COMMIT_KINDS.includes(ch.def.kind)) return "";
+    for (const id of ch.participants) ch.commits[id] ??= defaultCommit(ch);
+    const who = (id: string) => this.char(id);
+    const reveal = ch.participants.map((id) => `${who(id).name}: ${ch.commits[id]}`).join(", ");
+    if (ch.def.kind === "hold-the-door") {
+      const holders = ch.participants.filter((id) => ch.commits[id] === "hold" && !who(id).dead);
+      if (!holders.length) {
+        this.emit("challenge", { line: `🚪 Nobody holds it (${reveal}). It comes down on everyone.`, data: { phase: "reveal" } });
+        for (const id of ch.participants) this.hurtChar(who(id), rollDice(this.isGrim() ? "1d4" : "1d6").total);
+        return this.endChallenge(false, "nobody held", { holders: [] });
+      }
+      const total = rollDice(this.isGrim() ? "2d6" : "3d6").total;
+      const each = Math.ceil(total / holders.length);
+      this.emit("challenge", { line: `🚪 ${holders.map((id) => who(id).name).join(" and ")} take${holders.length === 1 ? "s" : ""} the weight (${reveal}): ${each} damage${holders.length > 1 ? " each" : ""}, and the rest get through.`, data: { phase: "reveal" } });
+      for (const id of holders) this.hurtChar(who(id), each);
+      return this.endChallenge(true, `${holders.length} held`, { holders });
+    }
+    if (ch.def.kind === "lantern-well") {
+      let total = 0;
+      const gave: Record<string, number> = {};
+      for (const id of ch.participants) {
+        const c = who(id);
+        const [n, unit] = ch.commits[id].split(" ");
+        const amt = Number(n) || 0;
+        if (unit === "hp") {
+          const paid = Math.max(0, Math.min(amt, c.hp - 1));
+          c.hp -= paid;
+          gave[id] = paid * 5;
+        } else {
+          const paid = Math.min(amt, c.gold);
+          c.gold -= paid;
+          gave[id] = paid;
+        }
+        total += gave[id];
+      }
+      const ok = total >= ch.state.threshold!;
+      this.emit("challenge", { line: `🏮 The offerings (${ch.participants.map((id) => `${who(id).name} ${gave[id]}`).join(", ")}): ${total} of ${ch.state.threshold}. ${ok ? "It lights." : "Not enough: it takes what was given and stays dark."}`, data: { phase: "reveal", total, threshold: ch.state.threshold } });
+      if (ok) {
+        for (const id of ch.participants) if (!who(id).dead) this.healChar(who(id), die(4), "🏮 The well's light");
+        if (this.isGrim()) this.run.light.torches += 2;
+      } else if (this.isGrim() && this.run.light.torches > 0) this.run.light.torches--;
+      return this.endChallenge(ok, `${total}/${ch.state.threshold}`, { gave });
+    }
+    const byPlate: Record<string, string[]> = {};
+    for (const id of ch.participants) (byPlate[ch.commits[id]] ??= []).push(id);
+    const clashed = Object.values(byPlate).filter((ids) => ids.length > 1).flat();
+    this.emit("challenge", { line: `⚙️ Everyone steps on (${reveal}). ${clashed.length ? `${clashed.map((id) => who(id).name).join(", ")} picked the same plate${clashed.length > 2 ? "s" : ""}: the floor bites.` : "Every plate taken once: something unlocks."}`, data: { phase: "reveal" } });
+    for (const id of clashed) this.hurtChar(who(id), rollDice("1d4").total);
+    if (!clashed.length) this.dropLoot({ title: ch.def.title, gold: 8 * ch.participants.length });
+    return this.endChallenge(!clashed.length, clashed.length ? `${clashed.length} clashed` : "all distinct", { clashed });
+  }
+
+  private endChallenge(ok: boolean, how: string, extra: Record<string, unknown> = {}): string {
+    const ch = this.challenge!;
+    const turns = this.turn - ch.startTurn;
+    const detail: Record<string, unknown> = { ...extra, attempts: ch.attempts };
+    if (ch.def.kind === "sealed-door") {
+      const spoken = this.events.filter((e) => e.seq > ch.startSeq && e.type === "speech" && e.actor);
+      detail.shared = ch.participants.filter((id) => spoken.some((e) => e.actor === id && saidClue(ch, id, e.line))).length;
+      detail.needed = ch.participants.length;
+    }
+    if (ch.def.kind === "blind-crossing") Object.assign(detail, { guide: ch.state.guide, walker: ch.state.walker ?? null, wrong: ch.state.wrong, steps: ch.state.path!.length });
+    this.challenge = null;
+    this.challengePlan.done++;
+    this.emit("challenge", { line: `${ok ? "✅" : "❌"} ${ch.def.title}: ${ok ? "through" : "failed"} (${how}).`, data: { phase: "end", kind: ch.def.kind, id: ch.def.id, ok, turns, how, participants: ch.participants, ...detail } });
+    if (ok) for (const id of ch.participants) if (!this.char(id).dead) this.grantXp(id, this.isGrim() ? 3 : 15, ch.def.title, "kill");
+    // A door that stays shut or a crossing lost means the long way round.
+    if (!ok && (ch.def.kind === "sealed-door" || ch.def.kind === "blind-crossing")) {
+      this.emit("status", { line: `The long way round costs the party a day.` });
+      this.advanceDays(1);
+    }
+    this.persist();
+    return `${ch.def.title}: ${ok ? "through" : "failed"} (${how}).`;
+  }
+
   // ─── hirelings ─────────────────────────────────────────────────────────────
   // Deliberately not heroes. They take orders (and mishear them), check morale when things go bad, desert when
   // they panic or go unpaid, and a torchbearer takes the torches along when it runs.
@@ -1494,6 +1708,12 @@ export class Game {
     if (!this.players().some((p) => this.conscious(p))) return `${crossing}\nNo one is left standing to go on.`;
     this.burnLight();
     this.burnLight();
+    if (this.challengeDue() && this.players().filter((p) => this.conscious(p)).length >= 2) {
+      const n = ((this.run.delves ??= {})[loc.id] = (this.run.delves[loc.id] ?? 0) + 1);
+      this.room = { n, title: "a way on that won't open for one", kind: "empty", searched: [] };
+      this.emit("delve", { line: `🚪 Deeper into ${loc.title}: room ${n}.`, data: { n, kind: "challenge" } });
+      return `${crossing ? `${crossing}\n\n` : ""}ROOM ${n}:\n${this.startChallenge()}`;
+    }
     const delves = (this.run.delves ??= {});
     const n = (delves[loc.id] = (delves[loc.id] ?? 0) + 1);
     const pick = <T,>(xs: T[]) => xs[die(xs.length) - 1];

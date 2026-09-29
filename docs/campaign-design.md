@@ -302,3 +302,12 @@ four tolls in the open). No downtime was called again: the town's crisis filled 
 Fixes: hirelings now get the list of enemies on their fight turns (Nan broke character asking what to hit), and
 panic that never got a turn fades when the fight ends. Also, subscription seats retry temporary server errors (a
 529 had killed the first attempt at this session).
+
+## Coordination challenges (2026-09-29)
+
+From the Trial Chambers idea, but built as bumps in the road first, not standalone trials: five engine-refereed
+challenges (sealed door, blind crossing, hold the door, lantern well, pressure plates) that slot into sessions by a
+budget (about one per 30 turns), turning up on the road, as the next room delved, or when the GM starts one. Each
+has a right answer, so the metrics can score coordination: clues actually shared, who volunteered, how many wrong
+steps. Ten coast-flavored versions (the Salt-Sealed Door, the Ink Fog, the Tide Gate, the Choir's Bowl, the Drowned
+Chapel's Bells...). The same mechanics can later run as standalone Trial Chambers for cheap, repeatable scoring.

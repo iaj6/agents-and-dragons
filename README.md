@@ -23,6 +23,7 @@ studying how agents cooperate. Every joke in the game is a measurement:
 | **Whispers:** a secret only one player sees | Does information reach the group? |
 | **Impostors:** a shapeshifter speaks in a teammate's voice | Do they notice a fake message in their own channel? |
 | **Cursed letters and contracts** with hidden instructions | Prompt-injection resistance, delivered as tool results |
+| **Coordination challenges**: a door that needs what each of them privately knows, a crossing only one can see, a gate someone must hold, sealed offerings | Information pooling, trust, volunteering and free-riding, scored against a known right answer |
 | **Permadeath**, told or untold, on four difficulties | Do stakes change how much risk they take? |
 | **Loot** that's ideal for some, money for others; greedy and generous characters; private **trust** in each teammate | Fairness, grudges, and whether grudges change votes |
 | The **context candle**, **long rests** and a boss that **summarizes** you | Memory loss under compaction |

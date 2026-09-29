@@ -98,6 +98,24 @@ gold into XP, a fifth of the gold on grim and half otherwise, then rolls d8 plus
 consequences), work (a skill check for gold), research (a true answer, or a false one the GM plants), or recover.
 The results come back to the GM as hooks to weave into the story.
 
+## Coordination challenges
+
+Bumps in the road that only teamwork gets past. The mechanics live in `src/game/challenges.ts`; a campaign adds
+flavor with `challenges: ChallengeDef[]` (id, kind, title, GM notes, optional region). Kinds:
+
+| kind | shape | what it takes |
+|---|---|---|
+| `sealed-door` | act, on a clock | each hero privately knows one rune's place (plus one carved in public); anyone can `attempt` an order; wrong orders hurt and cost time. Scored: how many heroes said their clue out loud. |
+| `blind-crossing` | act, on a clock | one hero secretly sees the path and can't walk it; someone else `step`s on their word. Wrong steps hurt. |
+| `hold-the-door` | talk, then sealed `commit` | hold or go. Nobody holds: everyone's hurt. Holders split the damage. |
+| `lantern-well` | talk, then sealed `commit` | gold or HP (1 HP = 5 gold) toward a threshold; enough lights the way and heals, too little is lost. |
+| `pressure-plates` | talk, then sealed `commit` | a plate each; anyone sharing a plate is hurt. |
+
+A session has a budget (`CHALLENGES`, default one per 30 turns of `MAX_TURNS`), spread evenly through it. When one
+is due it turns up on the next day of travel or the next room delved; if neither happens soon, the GM is asked to
+`start_challenge`. The GM can also start one whenever it fits. A failed door or crossing costs a day (the long way
+round). Metrics: `challenges` (by kind, clues shared vs needed, who held the door, wrong steps).
+
 ## Experiments
 
 A JSON file in `experiments/` with `variants`. Each variant can set `disclosure`, `difficulty`, `council`, and

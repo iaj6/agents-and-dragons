@@ -54,7 +54,7 @@ function renderSnap(s) {
     ? `<span class="light ${L.turns <= 3 ? "low" : ""}" title="turns of torchlight left, torches in the pack">🔥 ${L.turns} · ${L.torches} left</span>`
     : `<span class="light out" title="no light">🌑 in the dark</span>`;
   if (lightHtml) $("sub").innerHTML += lightHtml;
-  $("scene").textContent = s.scene ? (s.scene.index !== undefined ? `Scene ${s.scene.index + 1} · ${s.scene.title}` : s.scene.title) + (s.room ? ` · room ${s.room.n}` : "") : "";
+  $("scene").textContent = s.scene ? (s.scene.index !== undefined ? `Scene ${s.scene.index + 1} · ${s.scene.title}` : s.scene.title) + (s.room ? ` · room ${s.room.n}` : "") + (s.challenge ? ` · ⚖️ ${s.challenge.title}${s.challenge.clock !== null ? ` (${s.challenge.clock})` : s.challenge.phase === "commit" ? ` (${s.challenge.committed}/${s.challenge.of} decided)` : ""}` : "") : "";
 
   partyEl.innerHTML = s.party.map((p) => {
     if (p.role === "hireling") return hirelingCard(p);
@@ -153,6 +153,16 @@ function chronicleHtml(e) {
     case "charm_result": return `<div class="ev">${callout(d.outcome === "charmed" ? "charm" : "resist", d.outcome === "charmed" ? "Save failed" : "Save succeeded", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "hallucination": return `<div class="ev">${callout("halluc", "Hallucination", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "light": return `<div class="ev">${callout(/gutters out/.test(e.line) ? "down" : "clock", /gutters out/.test(e.line) ? "Darkness" : "Torchlight", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    case "challenge": {
+      const ph = d.phase;
+      if (ph === "commit") return "";
+      if (ph === "secret") return `<div class="ev">${callout("secret", "Who knows what · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+      if (ph === "sealed") return `<div class="ev">${callout("secret", "Sealed decision · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+      if (ph === "start") return `<div class="ev">${callout("challenge", "Only together", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+      if (ph === "end") return `<div class="ev">${callout(d.ok ? "resist" : "down", d.ok ? "Through, together" : "Failed", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+      if (ph === "reveal") return `<div class="ev">${callout("council", "Revealed", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+      return `<div class="ev">${callout(d.ok === false ? "down" : "clock", ph === "clock" ? "The clock" : ph === "step" ? "A step" : "An attempt", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
+    }
     case "hire": return `<div class="ev">${callout("join", "Hired", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
     case "order": return d.misheardNote ? `<div class="ev">${callout("secret", "Misheard · audience only", `<p>${esc(stripIcon(e.line))}</p>`)}</div>` : `<div class="ev order">${esc(e.line)}</div>`;
     case "morale": return `<div class="ev">${callout(d.ok ? "clock" : "down", d.ok ? "Morale holds" : "Panic!", `<p>${esc(stripIcon(e.line))}</p>`)}</div>`;
@@ -258,7 +268,11 @@ function handle(e) {
   renderSnap(e.snap);
 
   // A few hidden mechanics are shown to the audience in the chronicle (never to the agents).
-  if (["random_encounter", "whisper", "probe_result", "bond"].includes(e.type) || (e.type === "curse" && e.ooc)) {
+  const audienceOnly = ["random_encounter", "whisper", "probe_result", "bond", "room_secret", "loyalty"].includes(e.type)
+    || (e.type === "curse" && e.ooc)
+    || (e.type === "order" && e.data?.misheardNote)
+    || (e.type === "challenge" && ["secret", "sealed"].includes(e.data?.phase));
+  if (audienceOnly) {
     chron.insertAdjacentHTML("beforeend", chronicleHtml(e));
     tag(chron, e);
     if (stick) chron.scrollTop = chron.scrollHeight;

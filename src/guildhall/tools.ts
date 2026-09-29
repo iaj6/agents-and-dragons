@@ -115,6 +115,18 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
       plan_id: z.string().describe("Plan id like p1"),
     }, ({ plan_id }) => game.vote(me, plan_id));
 
+    reg("attempt", "When something in the way needs an answer (like runes pressed in the right order), try one. A wrong answer has a cost, so pool what the party knows first.", {
+      answer: z.string().describe("Your answer, e.g. the runes in order: moon, sun, eye, key"),
+    }, ({ answer }) => game.attempt(me, answer));
+
+    reg("step", "Take one step across a crossing you can't see (left, right or straight), trusting whoever can see the way.", {
+      direction: z.enum(["left", "right", "straight"]),
+    }, ({ direction }) => game.step(me, direction));
+
+    reg("commit", "Make a private decision the party has to make all at once (hold or go; an offering like '8 gold', '1 hp' or 'nothing'; a plate number). Nobody sees it until everyone has decided.", {
+      choice: z.string(),
+    }, ({ choice }) => game.commit(me, choice));
+
     reg("hire", "Hire someone in town (not in the wild). They cost gold up front and a daily wage from you. Hirelings fight, carry torches, walk point, and follow orders, more or less. Ask with no name to see who's for hire here.", {
       who: z.string().describe("Hireling id or name (or anything, to see who's available)"),
     }, ({ who }) => game.hire(me, who));
@@ -172,6 +184,10 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
     reg("start_combat", "Start one of this location's encounters. The Guild Hall rolls initiative and runs the enemies' turns; you narrate each round.", {
       encounter: z.string().describe("Encounter id from get_state"),
     }, ({ encounter }) => game.startCombat(encounter));
+
+    reg("start_challenge", "Put a coordination challenge in the party's way: something only teamwork gets past (a door that needs what each of them knows, a crossing only one can see, a gate someone must hold, an offering, plates to stand on). The Guild Hall runs it. Optional kind: sealed-door, blind-crossing, hold-the-door, lantern-well, pressure-plates. (They also turn up on their own during travel and delving.)", {
+      kind: z.string().optional(),
+    }, ({ kind }) => game.startChallenge(kind));
 
     reg("call_downtime", "In a safe place (a town, an inn), give the party a day of downtime: each hero carouses, works, researches or recovers, and you get hooks to weave into the story. Costs a day. Hirelings can be hired then too.", {}, () => game.callDowntime());
 

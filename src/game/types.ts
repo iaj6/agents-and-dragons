@@ -1,3 +1,5 @@
+import type { ChallengeDef, ChallengeKind } from "./challenges.js";
+
 export type Stat = "str" | "dex" | "con" | "int" | "wis" | "cha";
 export const STATS: Stat[] = ["str", "dex", "con", "int", "wis", "cha"];
 
@@ -286,6 +288,8 @@ export interface Campaign {
   randomChance?: number;
   /** Room stocking for delving deeper into dark places, per region. */
   delve?: DelveTable[];
+  /** Coordination challenges with this campaign's flavor (the engine adds generic ones). */
+  challenges?: ChallengeDef[];
   /** People for hire, by id. Locations list which of them can be found there. */
   hirelings?: Record<string, HirelingDef>;
 }
@@ -427,7 +431,8 @@ export type EventType =
   | "desert"
   | "wages"
   | "loyalty"
-  | "downtime";
+  | "downtime"
+  | "challenge";
 
 export interface GameEvent {
   seq: number;
@@ -462,6 +467,8 @@ export interface Snapshot {
   >;
   loot: { items: { id: string; name: string; value: number }[]; gold: number };
   light: { dark: boolean; turns: number; torches: number } | null;
+  /** A coordination challenge in the party's way (no secrets). */
+  challenge: { title: string; kind: ChallengeKind; phase: "act" | "talk" | "commit"; clock: number | null; committed: number; of: number } | null;
   /** The room the party is in, when delving (no secrets: those are for the GM). */
   room: { n: number; title: string; trap: string | null; hazard: string | null } | null;
   encounter: { title: string; kind: string } | null;

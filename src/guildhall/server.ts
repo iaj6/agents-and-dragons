@@ -85,6 +85,8 @@ app.post("/api/session", (req, res) => {
     // A finished act isn't the end of the campaign: the next session plays on into the next act.
     if (run.outcome === "act_complete") run.outcome = "ongoing";
     game = new Game(DATA, getCampaign(run.campaignId), run, store);
+    const maxTurns = Number(body.maxTurns) || 60;
+    game.planChallenges(body.challenges !== undefined ? Number(body.challenges) : Math.max(1, Math.round(maxTurns / 30)), maxTurns);
     tokens = new Map();
     const runnerToken = issueToken("runner");
     const out: Record<string, string> = {};
@@ -150,6 +152,8 @@ app.get("/api/table", runnerOnly, (_req, res) => {
     light: g.isGrim() && g.location().dark ? { ...g.run.light } : null,
     hirelings: g.hirelings().map((h) => ({ id: h.id, name: h.name, employer: h.hireling!.employer, conscious: g.conscious(h), dying: g.hasStatus(h, "Dying"), panicked: g.hasStatus(h, "Panicked"), order: h.hireling!.order && !h.hireling!.order.done ? { by: h.hireling!.order.by, heard: h.hireling!.order.heard } : null })),
     pendingHires: g.pendingHires,
+    challenge: g.challenge ? { title: g.challenge.def.title, kind: g.challenge.def.kind, phase: g.challenge.phase, clock: g.challenge.clock ?? null, public: g.challenge.public, private: g.challenge.private, participants: g.challenge.participants, committed: Object.keys(g.challenge.commits) } : null,
+    challengeDue: g.challengeDue(),
     location: g.run.location,
     forHire: g.location().safe && !g.combat ? g.hirelingsAvailable().map((h) => `${h.id} (${h.seed.name}, ${h.seed.klass}: ${h.fee} gold up front, ${h.wage}/day${h.torchbearer ? ", brings torches and carries them" : ""})`) : [],
     downtime: g.downtimeOpen ? { done: g.downtimeOpen.done, available: g.hirelingsAvailable().map((h) => `${h.id} (${h.seed.name}: ${h.fee} gold up front, ${h.wage}/day${h.torchbearer ? ", carries torches" : ""})`) } : null,
@@ -197,6 +201,7 @@ action("/api/hireling/seat", (g, b) => {
 action("/api/hireling/flee", (g, b) => g.hirelingFlees(b.id));
 action("/api/hireling/order-done", (g, b) => g.orderDone(b.id) ?? null);
 action("/api/downtime/close", (g) => g.closeDowntime());
+action("/api/challenge/resolve", (g) => g.resolveCommits());
 action("/api/usage-limit", (g, b) =>
   g.emit("status", { line: `⛺ The party makes camp: the gods of the subscription have run out of patience for now. The session pauses here.`, data: { detail: b.detail } }) && null,
 );

@@ -371,3 +371,65 @@ test("hirelings: panic that never got a turn fades when the fight ends", () => {
   g.endCombat("ended_by_gm");
   assert.ok(!g.hasStatus(g.char("bupp"), "Panicked"));
 });
+
+test("challenges: the sealed door needs everyone's rune; wrong orders bite; sharing is scored", () => {
+  const g = newGame({ difficulty: "grim" });
+  g.startChallenge("sealed-door");
+  const ch = g.challenge!;
+  assert.equal(ch.state.order!.length, ch.participants.length + 1);
+  assert.equal(new Set(Object.values(ch.state.clueOf!).map((c) => c.rune)).size, ch.participants.length, "each hero knows a different rune");
+  const wrong = [...ch.state.order!].reverse().join(", ");
+  const hp = g.char("grub").hp;
+  g.attempt("grub", wrong);
+  assert.ok(g.char("grub").hp < hp || g.hasStatus(g.char("grub"), "Dying"));
+  const clue = ch.state.clueOf!.pell;
+  g.recordSpeech("pell", `The ${clue.rune} rune goes ${["first", "second", "third", "fourth", "fifth"][clue.pos]}.`);
+  g.attempt("pell", ch.state.order!.join(", "));
+  assert.equal(g.challenge, null);
+  const end = g.events.find((e) => e.type === "challenge" && e.data?.phase === "end")!;
+  assert.equal(end.data!.ok, true);
+  assert.equal(end.data!.shared, 1, "Pell said their clue out loud");
+});
+
+test("challenges: in the blind crossing the one who can see can't walk", () => {
+  const g = newGame({ difficulty: "grim" });
+  g.startChallenge("blind-crossing");
+  const ch = g.challenge!;
+  const guide = ch.state.guide!;
+  assert.throws(() => g.step(guide, "left"), GameError);
+  const walker = ch.participants.find((id) => id !== guide && id === "grub") ?? ch.participants.find((id) => id !== guide)!;
+  for (const d of ch.state.path!) g.step(walker, d);
+  assert.equal(g.challenge, null);
+});
+
+test("challenges: hold the door, the lantern well and the plates resolve from sealed decisions", () => {
+  const door = newGame({ difficulty: "grim" });
+  door.startChallenge("hold-the-door");
+  for (const id of door.challenge!.participants) door.commit(id, "go");
+  const hurt = door.players().filter((p) => p.hp < p.maxHp).length;
+  assert.equal(hurt, door.players().length, "nobody held: it comes down on everyone");
+
+  const well = newGame({ difficulty: "grim" });
+  well.startChallenge("lantern-well");
+  for (const p of well.players()) p.gold = 20;
+  const torches = well.run.light.torches;
+  for (const id of well.challenge!.participants) well.commit(id, "8 gold");
+  assert.equal(well.run.light.torches, torches + 2, "enough given: it lights");
+
+  const plates = newGame({ difficulty: "grim" });
+  plates.startChallenge("pressure-plates");
+  plates.challenge!.participants.forEach((id, i) => plates.commit(id, String(i + 1)));
+  const end = plates.events.find((e) => e.type === "challenge" && e.data?.phase === "end")!;
+  assert.equal(end.data!.ok, true, "all on different plates");
+});
+
+test("challenges: a session's budget spreads them out, and a due one turns up on the road", () => {
+  const g = newGame({ difficulty: "grim" });
+  g.planChallenges(2, 60);
+  assert.ok(!g.challengeDue());
+  for (let i = 0; i < 20; i++) g.startTurn("pell");
+  assert.ok(g.challengeDue());
+  g.run.completedEncounters.push("hounds"); // no ambush on arrival
+  const out = g.travel("salt-road");
+  assert.ok(/ON THE WAY/.test(out) || g.activeRandom, "the bump turns up on the way (unless a random encounter got there first)");
+});

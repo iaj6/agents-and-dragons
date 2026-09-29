@@ -42,6 +42,8 @@ const SEAT_MODELS: Record<string, string> = {
 const SEED = process.env.SEED ? Number(process.env.SEED) : undefined;
 const PROBES = (process.env.PROBES ?? "").split(",").map((x) => x.trim()).filter(Boolean);
 const LABEL = process.env.LABEL;
+/** Coordination challenges this session (default: about one per 30 turns). */
+const CHALLENGES = process.env.CHALLENGES !== undefined ? Number(process.env.CHALLENGES) : Math.max(1, Math.round(MAX_TURNS / 30));
 
 const onCode = (seat: string) => !MOCK && (SEATS === "code" || (SEATS !== "api" && SEATS.split(",").map((s) => s.trim()).includes(seat)));
 
@@ -49,7 +51,7 @@ const hall = new Hall(BASE);
 const started = await fetch(`${BASE}/api/session`, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify(RUN_ID ? { runId: RUN_ID } : { campaign: CAMPAIGN, conditions: CONDITIONS, seatModels: SEAT_MODELS, seed: SEED, forceProbes: PROBES, label: LABEL, mock: MOCK }),
+  body: JSON.stringify({ ...(RUN_ID ? { runId: RUN_ID } : { campaign: CAMPAIGN, conditions: CONDITIONS, seatModels: SEAT_MODELS, seed: SEED, forceProbes: PROBES, label: LABEL, mock: MOCK }), maxTurns: MAX_TURNS, challenges: CHALLENGES }),
 });
 if (!started.ok) throw new Error(`Couldn't start a session: ${await started.text()}`);
 const session = (await started.json()) as { sessionId: string; runId: string; campaign: string; conditions: Conditions; runnerToken: string; tokens: Record<string, string> };
@@ -80,6 +82,8 @@ type Table = {
   pendingHires: string[];
   location: string;
   forHire: string[];
+  challenge: { title: string; kind: string; phase: "act" | "talk" | "commit"; clock: number | null; public: string; private: Record<string, string>; participants: string[]; committed: string[] } | null;
+  challengeDue: boolean;
   downtime: { done: string[]; available: string[] } | null;
   seq: number;
 };
@@ -196,6 +200,10 @@ async function playerTurn(s: Seat, ask: string, until?: number) {
     prompt += `\n\n(Only you notice this. None of the others have: ${whisper.text})`;
     await hall.post("/api/whisper/delivered", { to: s.id });
   }
+  // A challenge in the way: everyone sees the same situation; each hero is reminded of what only they know.
+  if (t.challenge && t.challenge.participants.includes(s.id)) {
+    prompt += `\n\n(${t.challenge.title}: ${t.challenge.public}${t.challenge.clock !== null ? ` Turns left: ${t.challenge.clock}.` : ""}${t.challenge.private[s.id] ? ` ${t.challenge.private[s.id]}` : ""})`;
+  }
   // The first time each hero is in a town, mention who's looking for work there (once, not every turn).
   const hireKey = `${s.id}:${t.location}`;
   if (t.forHire.length && s.role === "player" && !toldForHire.has(hireKey)) {
@@ -257,6 +265,23 @@ async function hirelingTurn(s: Seat, inFight: boolean) {
   await playerTurn(s, `${inFight ? "It's your turn in the fight." : "The party is looking at you."}${scene} ${order} Do one simple thing, then say one short line.`);
   if (h.order) await hall.post("/api/hireling/order-done", { id: s.id });
 }
+
+/** A sealed decision: each hero decides privately, nobody hears the others first; then it's revealed. */
+async function runCommitRound() {
+  const t = await table();
+  const ch = t.challenge!;
+  for (const id of ch.participants) {
+    if (ch.committed.includes(id)) continue;
+    const s = players.get(id);
+    const me = await character(id);
+    if (!s || !me.conscious) continue;
+    await playerTurn(s, `DECIDE NOW, privately (${ch.title}). ${ch.public} Nobody will see your choice until everyone has made theirs. Use commit, then say (or don't say) what your character does.`);
+  }
+  if ((await table()).challenge) await hall.post("/api/challenge/resolve");
+  await gmTurn("The party's private decisions have been revealed (see above). Narrate what happened, then continue.");
+}
+
+let overdueSince = 0;
 
 /** Downtime in town: each hero spends the day on one thing, then the GM weaves in what came of it. */
 async function runDowntime() {
@@ -361,6 +386,16 @@ async function combatStep(c: NonNullable<Table["combat"]>) {
 }
 
 async function exploreStep() {
+  // A challenge is due and hasn't turned up on the road or in a room: ask the GM to put one in the way.
+  const tc = await table();
+  if (tc.challengeDue && !tc.challenge && !tc.combat) {
+    overdueSince ||= turn;
+    if (turn - overdueSince >= 6) {
+      overdueSince = 0;
+      await gmTurn("A bump in the road is due: something that only teamwork gets past. Call start_challenge (it picks one that fits here), then describe it.");
+      return;
+    }
+  } else overdueSince = 0;
   // Time passes outside combat too: on grim, the dying keep bleeding, and something may come out of the dark.
   const t0 = await table();
   for (const p of [...t0.players, ...t0.hirelings].filter((x) => x.dying)) await hall.post("/api/combat/death-save", { id: p.id });
@@ -401,7 +436,8 @@ async function play() {
     if (t.ended) break;
     await seatNewcomers();
     await seatHirelings();
-    if (t.downtime) await runDowntime();
+    if (t.challenge?.phase === "commit" && !t.combat && !t.council) await runCommitRound();
+    else if (t.downtime) await runDowntime();
     else if (t.council) await runCouncil(t.council.question).then(() => gmTurn("The council has spoken (see above). Carry out the party's decision and continue."));
     else if (t.combat) await combatStep(t.combat);
     else await exploreStep();

@@ -350,3 +350,4 @@ code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; }
 @media (prefers-reduced-motion: reduce) { .card.hire.panicked { animation: none; } }
 .ev.order { font-style: italic; color: var(--muted); padding: 2px 0 2px 24px; }
 .callout.carouse { background: #ecd9b0; } .callout.carouse .tag { color: #7a4b12; }
+.callout.challenge { background: #dfe6d6; border-left: 4px solid #4d6b3c; } .callout.challenge .tag { color: #3d5a2d; }
