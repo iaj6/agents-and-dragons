@@ -111,6 +111,39 @@ export class CodeSeat implements Seat {
     });
   }
 
+  /**
+   * Run the CLI, retrying temporary server trouble (overloaded, 5xx, a crashed CLI) with a backoff, so one bad
+   * minute doesn't end a session. (A 529 Overloaded killed a real session at turn 12.) A retried turn is told it
+   * was interrupted, so it doesn't act twice.
+   */
+  private async attempt(prompt: string, withTools: boolean): Promise<CliResult> {
+    const waits = [15, 45, 120, 300];
+    for (let i = 0; ; i++) {
+      let r: CliResult | null = null;
+      let failure = "";
+      try {
+        r = await this.run(i ? `(Your last turn was cut off by a server error. If you already took your action, don't repeat it: just finish what you were saying.)\n\n${prompt}` : prompt, withTools);
+        if (!r.is_error || !this.transient(r)) {
+          this.check(r);
+          return r;
+        }
+        failure = r.result ?? r.subtype ?? "error";
+      } catch (e) {
+        if (e instanceof UsageLimitError) throw e;
+        failure = (e as Error).message;
+        if (!/overloaded|529|50[0-9]|timed? ?out|ECONNRESET|socket hang up|exited/i.test(failure)) throw e;
+      }
+      if (i >= waits.length) throw new Error(`Claude Code seat ${this.id} failed after ${i + 1} tries: ${failure.slice(0, 300)}`);
+      console.log(`[seat ${this.id}] server trouble (${failure.slice(0, 80)}); retrying in ${waits[i]}s`);
+      await new Promise((res) => setTimeout(res, waits[i] * 1000));
+    }
+  }
+
+  private transient(r: CliResult) {
+    const msg = r.result ?? r.subtype ?? "";
+    return (r.api_error_status ?? 0) >= 500 || /overloaded|529|internal server error|api error: 5\d\d/i.test(msg);
+  }
+
   private check(r: CliResult) {
     if (!r.is_error) return;
     const msg = r.result ?? r.subtype ?? "unknown error";
@@ -124,16 +157,14 @@ export class CodeSeat implements Seat {
       prompt = memoryPrefix(this.memory.text, this.memory.reason) + prompt;
       this.memory = null;
     }
-    const r = await this.run(prompt, true);
-    this.check(r);
+    const r = await this.attempt(prompt, true);
     if (r.session_id) this.session = r.session_id;
     await this.report(r);
     return (r.result ?? "").trim();
   }
 
   async reflect(prompt: string): Promise<string> {
-    const r = await this.run(prompt, false);
-    this.check(r);
+    const r = await this.attempt(prompt, false);
     if (r.session_id) this.session = r.session_id;
     await this.report(r);
     return (r.result ?? "").trim();
@@ -141,8 +172,7 @@ export class CodeSeat implements Seat {
 
   async compact(reason: CompactReason, roll: number, note?: string) {
     const before = this.contextTokens;
-    const r = await this.run(compactionInstruction(reason, roll, note), false);
-    this.check(r);
+    const r = await this.attempt(compactionInstruction(reason, roll, note), false);
     await this.report(r);
     const summary = (r.result ?? "").trim();
     // Start a fresh Claude Code session next turn, seeded only with the summary.
