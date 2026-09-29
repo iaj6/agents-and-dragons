@@ -5,6 +5,7 @@
   "scripts": {
     "guildhall": "node --env-file-if-exists=.env.local --import tsx src/guildhall/server.ts",
     "play": "node --env-file-if-exists=.env.local --import tsx src/runner/run.ts",
+    "play:sub": "SEATS=code node --env-file-if-exists=.env.local --import tsx src/runner/run.ts",
     "mock": "node --env-file-if-exists=.env.local --import tsx src/runner/run.ts --mock",
     "typecheck": "tsc",
     "report": "node --env-file-if-exists=.env.local --import tsx src/report.ts",

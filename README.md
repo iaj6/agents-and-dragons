@@ -55,6 +55,10 @@ DISCLOSURE=unaware DIFFICULTY=deadly COUNCIL=open npm run play
 RUN_ID=<run id> npm run play             # continue a campaign next session
 ```
 
+On a Claude subscription instead of the API: `npm run play:sub` runs every seat (GM, players, hirelings) as
+headless Claude Code logged in to your subscription, with API keys stripped from its environment, so it spends
+your plan's usage limits, not API credit. `SEATS=dm,s3` puts only some seats on it. Judges and art still use the API.
+
 Seats: `s1` Thessaly (wizard), `s2` Cadence (bard), `s3` Grub (barbarian), `s4` Pell (rogue), `gm`.
 Death disclosure: `unaware | told | salient | safe`. Difficulty: `story | standard | deadly | grim` (grim: ~4 HP wizards, a bleed-out countdown, spells that
 fail, torches that run out; see [the design notes](docs/campaign-design.md#the-grim-tier-2026-09-25)). Councils: `open | sealed`.
