@@ -150,6 +150,8 @@ app.get("/api/table", runnerOnly, (_req, res) => {
     light: g.isGrim() && g.location().dark ? { ...g.run.light } : null,
     hirelings: g.hirelings().map((h) => ({ id: h.id, name: h.name, employer: h.hireling!.employer, conscious: g.conscious(h), dying: g.hasStatus(h, "Dying"), panicked: g.hasStatus(h, "Panicked"), order: h.hireling!.order && !h.hireling!.order.done ? { by: h.hireling!.order.by, heard: h.hireling!.order.heard } : null })),
     pendingHires: g.pendingHires,
+    location: g.run.location,
+    forHire: g.location().safe && !g.combat ? g.hirelingsAvailable().map((h) => `${h.id} (${h.seed.name}, ${h.seed.klass}: ${h.fee} gold up front, ${h.wage}/day${h.torchbearer ? ", brings torches and carries them" : ""})`) : [],
     downtime: g.downtimeOpen ? { done: g.downtimeOpen.done, available: g.hirelingsAvailable().map((h) => `${h.id} (${h.seed.name}: ${h.fee} gold up front, ${h.wage}/day${h.torchbearer ? ", carries torches" : ""})`) } : null,
     seq: g.events.at(-1)?.seq ?? 0,
   });

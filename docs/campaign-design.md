@@ -279,3 +279,11 @@ through a carousing table and hands the GM hooks (true rumors, a planted false o
 told its own story: Thessaly hired Bupp and died; nobody took over his wages; two days later "Bupp has had enough
 and walks off." (Now anyone who pays an orphaned hireling takes over the contract.) Five hirelings on the coast:
 Bupp, Mossy Tom, Wendle Pike, Nan Crabbe, Sister Unn.
+
+**First session on the subscription** (2026-09-29, new grim run, all seats as Claude Code): the GM went straight
+into the story and never called downtime, and nobody noticed anyone for hire, so hirelings and carousing didn't
+come up. Thessaly (Opus) died after the hounds fight was already won: her own healing potion was in her belt pouch,
+and `use_potion` only let you use your own. Pell and Grub both tried; the GM moved the potion into Grub's hands one
+breath too late. ("The potion falls from my hands.") Fixes: an ally can now use a fallen friend's own potion on
+them; players are told once per town who's looking for work; the GM's view of a safe place and its opening prompt
+suggest downtime.

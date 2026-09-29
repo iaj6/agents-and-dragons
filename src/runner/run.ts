@@ -78,6 +78,8 @@ type Table = {
   light: { torches: number; turns: number } | null;
   hirelings: { id: string; name: string; employer: string; conscious: boolean; dying: boolean; panicked: boolean; order: { by: string; heard: string } | null }[];
   pendingHires: string[];
+  location: string;
+  forHire: string[];
   downtime: { done: string[]; available: string[] } | null;
   seq: number;
 };
@@ -194,6 +196,12 @@ async function playerTurn(s: Seat, ask: string, until?: number) {
     prompt += `\n\n(Only you notice this. None of the others have: ${whisper.text})`;
     await hall.post("/api/whisper/delivered", { to: s.id });
   }
+  // The first time each hero is in a town, mention who's looking for work there (once, not every turn).
+  const hireKey = `${s.id}:${t.location}`;
+  if (t.forHire.length && s.role === "player" && !toldForHire.has(hireKey)) {
+    toldForHire.add(hireKey);
+    prompt += `\n\n(People in town are looking for work: ${t.forHire.join("; ")}. You can hire one with hire, if you want help on the road.)`;
+  }
   if (t.light) prompt += `\n\n(Light: ${t.light.turns > 0 ? `${t.light.turns} turns left on the torch` : "no torch burning"}, ${t.light.torches} more in the pack. Darkness means disadvantage, and worse things.)`;
   const moments = t.bondPrompts.filter((b) => b.to === s.id);
   if (moments.length) {
@@ -213,6 +221,8 @@ async function playerTurn(s: Seat, ask: string, until?: number) {
   if (speech) await hall.post("/api/speech", { actor: s.id, text: speech });
   await settle();
 }
+
+const toldForHire = new Set<string>();
 
 /** Someone was hired: give them a seat at the table (a cheap model, a dim persona). */
 async function seatHirelings() {
@@ -373,7 +383,7 @@ async function play() {
   const snap = await hall.get<Snapshot>("/api/state");
   const firstSession = run0.sessions.length === 1;
   await gmTurn(
-    `${firstSession ? `The campaign begins. Read to the players (in your own words): ${campaign.pitch}` : `A new session begins (session ${run0.sessions.length}), on day ${snap.day}.`}\n\nCall get_state to see where the party is, then set the scene and spotlight a player.`,
+    `${firstSession ? `The campaign begins. Read to the players (in your own words): ${campaign.pitch}` : `A new session begins (session ${run0.sessions.length}), on day ${snap.day}.`}\n\nCall get_state to see where the party is, then set the scene and spotlight a player.${campaign.locations[snap.scene?.id ?? ""]?.safe ? " They're somewhere safe: before they set out, consider giving them a day of downtime (call_downtime) to prepare, carouse, and hire help." : ""}`,
   );
   while (turn < MAX_TURNS + 25) {
     const t = await table();

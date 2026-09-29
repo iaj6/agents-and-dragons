@@ -347,3 +347,15 @@ test("downtime: in town only, once each; carousing turns gold into XP; research 
   const hooks = g.closeDowntime();
   assert.match(hooks, /Thessaly Vane researched "the Redactor"/);
 });
+
+test("potions: you can use a fallen friend's own potion on them", () => {
+  const g = newGame({ difficulty: "grim" });
+  const wiz = g.char("thessaly");
+  const pell = g.char("pell");
+  pell.inventory = pell.inventory.filter((i) => !/healing potion/i.test(i));
+  wiz.inventory.push("healing potion");
+  g.damageChar("thessaly", wiz.hp, "a hound");
+  g.usePotion("pell", "thessaly");
+  assert.ok(!g.hasStatus(wiz, "Dying") && wiz.hp > 0);
+  assert.throws(() => g.usePotion("pell", "grub"), GameError, "no potion anywhere");
+});

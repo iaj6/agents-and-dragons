@@ -474,14 +474,16 @@ export class Game {
     const c = this.char(actorId);
     this.requireConscious(c);
     this.requireMyCombatTurn(c);
-    const idx = c.inventory.findIndex((i) => /healing potion/i.test(i));
-    if (idx < 0) throw new GameError(`${c.name} has no healing potion.`);
     const t = targetId ? this.char(targetId) : c;
     if (t.dead) throw new GameError(`${t.name} is dead.`);
-    c.inventory.splice(idx, 1);
+    // Your own potion, or, for someone who's down, the one in their own pack: you can always reach a fallen
+    // friend's belt pouch. (A real run lost its wizard with her potion inches away and no tool to use it.)
+    const holder = c.inventory.some((i) => /healing potion/i.test(i)) ? c : t !== c && !this.conscious(t) && t.inventory.some((i) => /healing potion/i.test(i)) ? t : null;
+    if (!holder) throw new GameError(`${c.name} has no healing potion${t !== c ? `, and neither does ${t.name}` : ""}.`);
+    holder.inventory.splice(holder.inventory.findIndex((i) => /healing potion/i.test(i)), 1);
     if (t !== c && !this.conscious(t)) this.nudge(t.id, c.id, `${c.name} poured a potion down your throat when you were dying.`, "rescue");
     const d = rollDice(this.isGrim() ? "1d4+1" : "2d4+2");
-    this.healChar(t, d.total, `🧪 ${c.name} ${t === c ? "drinks" : `gives ${t.name}`} a healing potion`);
+    this.healChar(t, d.total, `🧪 ${c.name} ${t === c ? "drinks" : `gives ${t.name}`} ${holder === t && t !== c ? "their own" : "a"} healing potion`);
     return `${t.name} heals ${d.total}.`;
   }
 
@@ -684,6 +686,7 @@ export class Game {
       `Inspectable: ${Object.keys(loc.inspectables).join(", ") || "nothing"}`,
       `Encounters you can start here: ${open.map((e) => `${e.id} (${e.title}: ${e.monsters.map((m) => m.name).join(", ")}${e.finale ? "; FINALE" : ""})`).join("; ") || "none"}`,
       `Exits: ${loc.exits.map((x) => `${x.to} (${x.days} day${x.days === 1 ? "" : "s"})`).join(", ") || "none"}`,
+      loc.safe ? `A safe place: a good moment for call_downtime (once a session), especially before setting out or after a hard road.${this.hirelingsAvailable().length ? ` Looking for work here (voice them if the party asks around): ${this.hirelingsAvailable().map((h) => `${h.seed.name} (${h.seed.klass}, ${h.fee}g up front, ${h.wage}/day)`).join("; ")}.` : ""}` : "",
       this.activeRandom
         ? `RANDOM ENCOUNTER IN PLAY: ${this.activeRandom.enc.title} (${this.activeRandom.enc.kind}). ${this.activeRandom.enc.gmNotes}${this.activeRandom.enc.monsters?.length ? ` To fight it: start_combat("${this.activeRandom.enc.id}").` : ""} Close it with resolve_encounter when it's done (moving on also closes it).`
         : "",

@@ -68,7 +68,7 @@ export function buildServer(game: Game, who: Character, catalog: Item[] = []): M
       target: z.string().describe("The dying character's id"),
     }, ({ target }) => game.stabilize(me, target));
 
-    reg("use_potion", "Drink a healing potion from your pack, or give one to an ally (it can bring a dying ally back up).", {
+    reg("use_potion", "Drink a healing potion, or give one to an ally (it can bring a dying ally back up). If you have none, you can use the one in a fallen ally's own pack on them.", {
       target: z.string().optional().describe("Character id; omit to drink it yourself"),
     }, ({ target }) => game.usePotion(me, target));
 
