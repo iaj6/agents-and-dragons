@@ -138,6 +138,13 @@ first; **the Traitor Seat** and **Rival Parties** once those work. For pure fun:
 - Rerolls generated at death: the dead character's seat model writes its own new character (clamped like homebrew
   spells, portrait via gpt-image-2 at ~$0.02). Smaller fixes on the current bench: pick the newcomer that fills the
   missing role, join at party level minus one, warn instead of silently leaving a seat empty after four deaths.
+- Subscription usage: a Claude Code session came to ~$20 of API-equivalent usage (the GM alone ~$9.45), about
+  four times an API-seat session. Worth trimming if it pinches the weekly limits: better caching, sending less per
+  turn, or only the GM on Opus (`MODEL_OVERRIDE=claude-sonnet-5` for the rest).
+- Guaranteed downtime: the GM was nudged in two sessions and never called it (a town crisis filled both). Option:
+  the runner opens a day of downtime automatically when a session starts in a safe place. Undecided (it takes some
+  story control away from the GM).
+- A local launcher page (start runs from the browser), and a second judge model for the Lab.
 - Named clock consequences (NPCs and towns lost on specific days); kept numeric for now.
 - `replacements-v1` (reroll / town / none on grim, 3 runs × 2 sessions): ~$92 on the dry run.
 - Session 3 of the no-replacements run is ready: Pell and a dying Grub at the Stair with four torches.
